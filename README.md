@@ -25,6 +25,14 @@ must be accepted**. Drop one and it crumbles on the floor: *"D'oh!"* (with a sad
 - **P** / Esc pause; **Esc** again while paused quits to the title (Esc on the title quits
   the game). **G** cycle graphics modes, **M** mute, **C** toggle scanlines.
 
+## Screenshots
+
+| | |
+|---|---|
+| ![Title screen](docs/screenshots/title.png) | ![Night shift at the Internet](docs/screenshots/play.png) |
+| ![Consent popup](docs/screenshots/popup.png) | ![D'oh!](docs/screenshots/doh.png) |
+| ![The Cache Cleaner docked under the lift](docs/screenshots/cleaner_docked.png) | ![Session expired](docs/screenshots/game_over.png) |
+
 ## Silly extras
 
 - **Cracktro:** start with `cargo run -- --cracktro`, or open the web build with
@@ -53,14 +61,6 @@ must be accepted**. Drop one and it crumbles on the floor: *"D'oh!"* (with a sad
 
 Shortcuts: `task run:cracked` (alias `intro`), `task run:ega` / `run:c64` / `run:cga` /
 `run:hercules`, `task run:retro` (cracktro, then C64), or `task run GFX=cga`.
-
-## Screenshots
-
-| | |
-|---|---|
-| ![Title screen](docs/screenshots/title.png) | ![Night shift at the Internet](docs/screenshots/play.png) |
-| ![Consent popup](docs/screenshots/popup.png) | ![D'oh!](docs/screenshots/doh.png) |
-| ![The Cache Cleaner docked under the lift](docs/screenshots/cleaner_docked.png) | ![Session expired](docs/screenshots/game_over.png) |
 
 ## Run
 
