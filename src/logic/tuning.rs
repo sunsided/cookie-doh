@@ -17,6 +17,10 @@ pub struct Tuning {
     pub spider_hang: f32,
     /// Spider descent speed, px/s.
     pub spider_speed: f32,
+    /// Seconds the Cache Cleaner patrols before heading for the dock (less while camping).
+    pub cleaner_gap: (f32, f32),
+    /// Seconds it stays docked under the lift.
+    pub cleaner_dock: f32,
     /// Seconds between cookie-consent popups; `None` = no popups this level.
     pub popup_gap: Option<(f32, f32)>,
 }
@@ -34,6 +38,8 @@ pub fn for_level(level: u32) -> Tuning {
         spider_gap: ((16.0 - 1.2 * l).max(6.0), (24.0 - 1.5 * l).max(10.0)),
         spider_hang: (2.4 + 0.15 * l).min(4.0),
         spider_speed: (38.0 + 4.0 * l).min(70.0),
+        cleaner_gap: ((9.0 - 0.6 * l).max(5.0), (14.0 - 0.9 * l).max(8.0)),
+        cleaner_dock: (2.5 + 0.15 * l).min(4.0),
         popup_gap: (level >= 2).then(|| ((18.0 - 1.5 * l).max(7.0), (28.0 - 2.0 * l).max(12.0))),
     }
 }

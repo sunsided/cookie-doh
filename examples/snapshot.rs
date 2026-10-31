@@ -78,6 +78,20 @@ fn main() {
     w2.popup = Some(cookie_doh::logic::Popup { lane: 1, age: 1.0 });
     shot(&mut s, &w2, &fx, "popup");
 
+    let mut wc = w.clone();
+    wc.player.lane = 2;
+    wc.player.pos = 2.0;
+    wc.spider = SpiderState::Down { lane: 1, y: 30.0 };
+    wc.time = 0.0;
+    wc.cleaner.state = cookie_doh::logic::cleaner::CleanerState::Charge;
+    wc.cleaner.x = 200.0;
+    shot(&mut s, &wc, &fx, "cleaner_coming");
+    wc.player.lane = 2;
+    wc.player.pos = 2.0;
+    wc.cleaner.state = cookie_doh::logic::cleaner::CleanerState::Docked { t: 2.0 };
+    wc.cleaner.x = cookie_doh::logic::cleaner::DOCK_X;
+    shot(&mut s, &wc, &fx, "cleaner_docked");
+
     let mut w3 = w.clone();
     w3.phase = Phase::Doh {
         t: 1.5,

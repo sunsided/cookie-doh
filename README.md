@@ -16,6 +16,10 @@ must be accepted**. Drop one and it crumbles on the floor: *"D'oh!"* (with a sad
   the belts from level 2 on.
 - **The Web Crawler** drops down to the jar spot of a random lane (watch for the red `!`).
   Don't be standing there when it lands. Cookies arriving at its lane get eaten - no penalty.
+- **The Cache Cleaner** patrols the floor clearing crumbs. Now and then it beeps and heads for
+  the dock under the lift (red `!` on the bottom lane) and bumps whoever is parked there.
+  Camp at the bottom and it comes three times as often. While docked, it clears cookies
+  that drop off the bottom belt - no penalty.
 - **Golden cookies** are worth 10x. Ten cookies fill the jar for a bonus.
 - Three D'ohs and your session expires.
 - **P** / Esc pause; **Esc** again while paused quits to the title (Esc on the title quits

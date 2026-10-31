@@ -289,6 +289,8 @@ impl CookieDoh {
         }
 
         self.world.update(dt);
+        let x = self.world.cleaner.x;
+        self.fx.vacuum(x - 8.0, x + 8.0);
         let events = std::mem::take(&mut self.world.events);
         for e in &events {
             self.fx.on_event(e, &self.world);
@@ -327,13 +329,17 @@ impl CookieDoh {
             Event::TippedOff { .. } => self.sound(audio, &b.tip, 0.7),
             Event::Crumbled { .. } => self.sound(audio, &b.crumble, 1.0),
             Event::Doh(cause) => {
-                if cause == DohCause::Bitten {
-                    self.sound(audio, &b.bite, 1.0);
+                match cause {
+                    DohCause::Bitten => self.sound(audio, &b.bite, 1.0),
+                    DohCause::Bumped => self.sound(audio, &b.bonk, 1.0),
+                    DohCause::Dropped(_) => {}
                 }
                 self.sound(audio, &b.doh, 1.0);
             }
             Event::SpiderComing { .. } => self.sound(audio, &b.spider, 0.7),
             Event::SpiderAte { .. } => self.sound(audio, &b.munch, 0.8),
+            Event::CleanerComing => self.sound(audio, &b.cleaner, 0.7),
+            Event::CleanerAte => self.sound(audio, &b.slurp, 0.8),
             Event::PopupOpened => self.sound(audio, &b.popup, 0.8),
             Event::PopupAccepted { .. } => self.sound(audio, &b.popup_ok, 0.9),
             Event::LevelClear { .. } => self.sound(audio, &b.level_clear, 0.9),

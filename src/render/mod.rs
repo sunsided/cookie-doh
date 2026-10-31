@@ -71,6 +71,7 @@ impl Renderer {
             }
         }
         self.lift(s, w, v.fx, v.t);
+        self.cleaner(s, w, v.t);
         for c in &w.cookies {
             if matches!(c.state, CookieState::Falling { .. }) {
                 self.cookie(s, c.kind, c.x, c.y);
@@ -207,8 +208,8 @@ impl Renderer {
         s.blit(&a.body, bx, by);
 
         // Face.
-        let spider_coming =
-            matches!(w.spider, SpiderState::Down { lane, .. } if lane == w.player.nearest());
+        let spider_coming = matches!(w.spider, SpiderState::Down { lane, .. } if lane == w.player.nearest())
+            || (w.cleaner.threatening() && w.player.nearest() == LANES - 1);
         if doh {
             s.blit(&a.brows_doh, bx + 3, by + 5);
             s.blit(&a.mouth_doh, bx + 7, by + 11);
@@ -257,7 +258,7 @@ impl Renderer {
             s.blit(&a.hand, bx, by + 6);
             s.blit_flipped(&a.hand, bx + 17, by + 6);
             if let Phase::Doh {
-                cause: DohCause::Bitten,
+                cause: DohCause::Bitten | DohCause::Bumped,
                 ..
             } = w.phase
             {
@@ -319,14 +320,7 @@ impl Renderer {
     fn spider(&self, s: &mut Screen, w: &World, t: f32) {
         let x = SPIDER_X as i32;
         if let SpiderState::Down { lane, .. } = w.spider {
-            // Warning sign at the lane it's heading for.
-            if (t * 6.0) as i32 % 2 == 0 {
-                let y = LANE_Y[lane] as i32 - 24;
-                s.fill_rect(241, y, 5, 9, RED);
-                s.rect_outline(240, y - 1, 7, 11, YELLOW);
-                s.vline(243, y + 1, y + 4, WHITE);
-                s.put(243, y + 6, WHITE);
-            }
+            warning(s, lane, t);
         }
         let Some(y) = w.spider_y() else { return };
         let y = y.round() as i32;
@@ -338,6 +332,53 @@ impl Renderer {
             (t * 3.0) as usize % 2
         };
         s.blit(&self.art.spider[frame], x - 7, y);
+    }
+
+    /// The Cache Cleaner on the floor.
+    fn cleaner(&self, s: &mut Screen, w: &World, t: f32) {
+        use crate::logic::cleaner::CleanerState;
+        let c = &w.cleaner;
+        if matches!(c.state, CleanerState::Charge) {
+            warning(s, LANES - 1, t);
+        }
+        let spr = &self.art.cleaner;
+        let (x, y) = (c.x.round() as i32 - spr.w / 2, FLOOR_Y as i32 - spr.h);
+        let flip = c.dir < 0.0;
+        s.blit_ex(spr, x, y, flip, None);
+        // Spinning side brush at the front.
+        let front = if flip { x - 1 } else { x + spr.w };
+        let spin = (t * 20.0) as i32 % 3;
+        s.put(front, FLOOR_Y as i32 - 1 - spin % 2, GREY_LT);
+        s.put(
+            front + if flip { -1 } else { 1 } * (spin - 1).abs(),
+            FLOOR_Y as i32 - 1,
+            GREY,
+        );
+        // Eyes on the face display: calm cyan on patrol, angry red on its way to you.
+        let angry = c.threatening();
+        let blink = !angry && (t * 0.5).fract() < 0.05;
+        let eye = if angry {
+            if (t * 8.0) as i32 % 2 == 0 { RED } else { PINK }
+        } else {
+            CYAN_LT
+        };
+        for ex in [8, 12] {
+            let c = if blink { BLACK } else { eye };
+            s.hline(x + ex, x + ex + 1, y + 4, c);
+        }
+        if angry {
+            // Angry brows.
+            s.put(x + 8, y + 3, eye);
+            s.put(x + 13, y + 3, eye);
+        }
+        // Status LED on top.
+        let led = if angry || (t * 1.5) as i32 % 2 == 0 {
+            if angry { RED } else { GREEN_LT }
+        } else {
+            GREEN
+        };
+        s.put(x + spr.w / 2 - 1, y, led);
+        s.put(x + spr.w / 2, y, led);
     }
 
     fn particles(&self, s: &mut Screen, fx: &Fx) {
@@ -472,6 +513,18 @@ impl Renderer {
             }
             _ => {}
         }
+    }
+}
+
+/// Blinking "!" next to the jar spot of `lane`: something is coming for it.
+fn warning(s: &mut Screen, lane: usize, t: f32) {
+    if (t * 6.0) as i32 % 2 == 0 {
+        // Just above the end of that lane's belt, level with its jar (not the lane above).
+        let y = LANE_Y[lane] as i32 - 13;
+        s.fill_rect(241, y, 5, 9, RED);
+        s.rect_outline(240, y - 1, 7, 11, YELLOW);
+        s.vline(243, y + 1, y + 4, WHITE);
+        s.put(243, y + 6, WHITE);
     }
 }
 

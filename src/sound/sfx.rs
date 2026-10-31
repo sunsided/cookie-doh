@@ -17,6 +17,10 @@ pub struct Bank {
     pub spider: Vec<f32>,
     pub bite: Vec<f32>,
     pub munch: Vec<f32>,
+    /// The Cache Cleaner sets off: "boop-beep, boop-beep".
+    pub cleaner: Vec<f32>,
+    pub bonk: Vec<f32>,
+    pub slurp: Vec<f32>,
     pub popup: Vec<f32>,
     pub popup_ok: Vec<f32>,
     pub menu: Vec<f32>,
@@ -47,6 +51,9 @@ impl Bank {
             spider: spider(),
             bite: bite(),
             munch: munch(),
+            cleaner: cleaner_beep(),
+            bonk: bonk(),
+            slurp: slurp(),
             popup: arpeggio(&[79, 72, 79, 72], 0.06, Wave::Pulse(0.25), 0.05),
             popup_ok: arpeggio(&[67, 72, 76, 79, 84], 0.03, Wave::Pulse(0.25), 0.1),
             menu: sweep(900.0, 1100.0, 0.03, Wave::Pulse(0.25), 0.3),
@@ -139,6 +146,43 @@ fn munch() -> Vec<f32> {
         n.sample(3000.0) * chomp * (1.0 - t / 0.32)
     });
     normalize(&mut buf, 0.5);
+    buf
+}
+
+fn cleaner_beep() -> Vec<f32> {
+    let mut osc = Osc::default();
+    let mut buf = render(0.72, |t| {
+        let k = (t / 0.12) as usize;
+        let hz = if k.is_multiple_of(2) { 880.0 } else { 1320.0 };
+        let gate = if (t / 0.12).fract() < 0.75 && k < 6 {
+            1.0
+        } else {
+            0.0
+        };
+        osc.sample(Wave::Pulse(0.25), hz) * gate
+    });
+    normalize(&mut buf, 0.45);
+    buf
+}
+
+fn bonk() -> Vec<f32> {
+    let mut osc = Osc::default();
+    let mut n = Noise::default();
+    let mut buf = render(0.3, |t| {
+        let tone = osc.sample(Wave::Triangle, 60.0 + 240.0 * (-t * 25.0).exp()) * (-t * 9.0).exp();
+        tone + n.sample(6000.0) * (-t * 60.0).exp() * 0.5
+    });
+    normalize(&mut buf, 0.85);
+    buf
+}
+
+fn slurp() -> Vec<f32> {
+    let mut n = Noise::default();
+    let mut buf = render(0.35, |t| {
+        // Noise clocked ever higher: the sound of something going up a tube.
+        n.sample(1500.0 + 14000.0 * t / 0.35) * (1.0 - t / 0.35)
+    });
+    normalize(&mut buf, 0.45);
     buf
 }
 

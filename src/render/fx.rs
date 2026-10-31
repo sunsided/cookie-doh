@@ -155,6 +155,19 @@ impl Fx {
             }
             Event::Doh(cause) => {
                 self.flash = Some((RED, 0.45));
+                if cause == DohCause::Bumped {
+                    self.shake = 0.5;
+                    let x = crate::logic::cleaner::DOCK_X;
+                    self.burst(
+                        x,
+                        FLOOR_Y - 8.0,
+                        16,
+                        &[WHITE, YELLOW, GREY_LT],
+                        70.0,
+                        0.0,
+                        false,
+                    );
+                }
                 if cause == DohCause::Bitten {
                     self.shake = 0.4;
                     let y = w.player.pos * 39.0 + LANE_Y[0];
@@ -203,6 +216,10 @@ impl Fx {
                     }
                 }
             }
+            Event::CleanerAte => {
+                let x = crate::logic::cleaner::DOCK_X;
+                self.text(x - 26.0, FLOOR_Y - 26.0, "CLEARED!", CYAN_LT);
+            }
             Event::LevelStart { .. } => self.crumbs.clear(),
             _ => {}
         }
@@ -244,6 +261,12 @@ impl Fx {
             t.life -= dt * 0.8;
             t.life > 0.0
         });
+    }
+
+    /// The Cache Cleaner sucks up floor crumbs between `x0` and `x1`.
+    pub fn vacuum(&mut self, x0: f32, x1: f32) {
+        self.crumbs
+            .retain(|&(x, _, _)| !(x0 as i32..=x1 as i32).contains(&x));
     }
 
     /// Integer pixel offset for screen shake.

@@ -5,6 +5,7 @@
 //! crumbles on the floor: "D'oh!". Meanwhile the Web Crawler (a spider) drops in to the jar
 //! and bites anyone standing there, and consent popups hide the belts until accepted.
 
+pub mod cleaner;
 pub mod layout;
 mod rng;
 pub mod tuning;
@@ -12,6 +13,7 @@ pub mod tuning;
 pub use rng::Rng;
 pub use tuning::Tuning;
 
+use cleaner::{Cleaner, CleanerSignal};
 use layout::*;
 
 /// Number of D'ohs before the session expires.
@@ -122,6 +124,8 @@ pub enum DohCause {
     /// A cookie crumbled on the floor (its lane).
     Dropped(usize),
     Bitten,
+    /// Parked at the bottom lane when the Cache Cleaner docked.
+    Bumped,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -174,6 +178,8 @@ pub enum Event {
     SpiderAte {
         lane: usize,
     },
+    CleanerComing,
+    CleanerAte,
     PopupOpened,
     PopupAccepted {
         points: u32,
@@ -198,6 +204,7 @@ pub struct World {
     pub player: Player,
     pub cookies: Vec<Cookie>,
     pub spider: SpiderState,
+    pub cleaner: Cleaner,
     pub popup: Option<Popup>,
     /// Per-lane belt speed, px/s.
     pub belt_speed: [f32; LANES],
@@ -232,6 +239,7 @@ impl World {
             },
             cookies: Vec::new(),
             spider: SpiderState::Away { t: 10.0 },
+            cleaner: Cleaner::new(20.0),
             popup: None,
             belt_speed: [0.0; LANES],
             belt_phase: [0.0; LANES],
@@ -279,6 +287,13 @@ impl World {
             Some((lo, hi)) => self.rng.range(lo, hi),
             None => f32::INFINITY,
         };
+        // The Cache Cleaner keeps its own schedule across levels and D'ohs; it only backs off
+        // if it was on its way, and never waits longer than this level allows.
+        self.cleaner.retreat();
+        let (_, hi) = self.tuning.cleaner_gap;
+        if let cleaner::CleanerState::Patrol { t } = &mut self.cleaner.state {
+            *t = t.min(hi);
+        }
     }
 
     // ----- input -----------------------------------------------------------------------
@@ -391,6 +406,10 @@ impl World {
             if self.phase != Phase::Play {
                 return;
             }
+            self.step_cleaner(dt);
+            if self.phase != Phase::Play {
+                return;
+            }
             self.step_popup(dt);
         }
         self.step_spawns(dt);
@@ -405,6 +424,7 @@ impl World {
             self.spider = SpiderState::Up {
                 y: self.spider_y().unwrap_or(CEILING_Y),
             };
+            self.cleaner.retreat();
             self.phase = Phase::Clear { t: CLEAR_TIME };
         }
     }
@@ -480,6 +500,24 @@ impl World {
                 y: spider_hang_y(lane),
             };
             self.doh(DohCause::Bitten);
+        }
+    }
+
+    fn step_cleaner(&mut self, dt: f32) {
+        let bottom = LANES - 1;
+        let camping = self.player.parked() == Some(bottom);
+        let (lo, hi) = self.tuning.cleaner_gap;
+        let gap = self.rng.range(lo, hi);
+        match self
+            .cleaner
+            .step(dt, camping, self.tuning.cleaner_dock, || gap)
+        {
+            CleanerSignal::Coming => self.events.push(Event::CleanerComing),
+            CleanerSignal::Arrived | CleanerSignal::None => {}
+        }
+        if self.cleaner.docked() && self.player.nearest() == bottom {
+            self.cleaner.retreat();
+            self.doh(DohCause::Bumped);
         }
     }
 
@@ -571,6 +609,8 @@ impl World {
     fn step_cookies(&mut self, dt: f32) {
         let parked = self.player.parked();
         let spider_lane = self.spider_lane();
+        let cleaner_docked = self.hazards && self.cleaner.docked();
+        let mut vacuumed = Vec::new();
         let mut accepted = Vec::new();
         let mut crumbled = Vec::new();
         let mut eaten = Vec::new();
@@ -665,6 +705,9 @@ impl World {
                             c.y = LANE_Y[below] + 2.0 - COOKIE_SIZE;
                             crumbled.push(i);
                         }
+                    } else if cleaner_docked && bottom >= FLOOR_Y - cleaner::HEIGHT {
+                        // Landed on the Cache Cleaner, which clears it.
+                        vacuumed.push(i);
                     } else if bottom >= FLOOR_Y {
                         crumbled.push(i);
                     }
@@ -706,6 +749,10 @@ impl World {
             self.events.push(Event::SpiderAte {
                 lane: self.cookies[i].lane,
             });
+            gone.push(i);
+        }
+        for &i in &vacuumed {
+            self.events.push(Event::CleanerAte);
             gone.push(i);
         }
         let mut dropped = None;
@@ -900,6 +947,90 @@ mod tests {
         put_cookie(&mut w, 0, CATCH_X - 0.5);
         run(&mut w, 0.3);
         assert!(w.events.contains(&Event::SpiderAte { lane: 0 }));
+        assert_eq!(w.lives, START_LIVES);
+        assert_eq!(w.phase, Phase::Play);
+    }
+
+    fn with_cleaner(seed: u64) -> World {
+        let mut w = playing(seed);
+        w.hazards = true;
+        w.popup_timer = f32::INFINITY;
+        w.spider = SpiderState::Away { t: 1e9 };
+        w
+    }
+
+    #[test]
+    fn cleaner_bumps_a_bottom_camper() {
+        let mut w = with_cleaner(1);
+        w.player.lane = 3;
+        w.player.pos = 3.0;
+        w.cleaner.state = cleaner::CleanerState::Charge;
+        w.cleaner.x = cleaner::DOCK_X - 2.0;
+        run(&mut w, 0.3);
+        assert!(matches!(
+            w.phase,
+            Phase::Doh {
+                cause: DohCause::Bumped,
+                ..
+            }
+        ));
+        assert_eq!(w.lives, START_LIVES - 1);
+    }
+
+    #[test]
+    fn camping_at_the_bottom_summons_the_cleaner() {
+        let mut camper = with_cleaner(1);
+        camper.player.lane = 3;
+        camper.player.pos = 3.0;
+        camper.cleaner.state = cleaner::CleanerState::Patrol { t: 9.0 };
+        let mut roamer = camper.clone();
+        roamer.player.lane = 1;
+        roamer.player.pos = 1.0;
+        run(&mut camper, 3.5);
+        run(&mut roamer, 3.5);
+        assert!(camper.events.contains(&Event::CleanerComing));
+        assert!(!roamer.events.contains(&Event::CleanerComing));
+    }
+
+    /// It used to reset its schedule every level and turn around short of the lift, so in
+    /// real play it never seemed to come. It must show up early in an ordinary game.
+    #[test]
+    fn cleaner_visits_early_in_a_real_game() {
+        for seed in 1..=8 {
+            let mut w = World::new(seed);
+            let mut came = false;
+            for _ in 0..(20.0 / DT) as usize {
+                // A decent player: always heads for the next cookie to arrive.
+                let next = w
+                    .cookies
+                    .iter()
+                    .filter_map(|c| w.arrival_in(c).map(|a| (a, c.lane)))
+                    .min_by(|a, b| a.0.total_cmp(&b.0));
+                if let Some((_, lane)) = next {
+                    w.move_to(lane);
+                }
+                w.update(DT);
+                came |= w.events.contains(&Event::CleanerComing);
+                w.events.clear();
+            }
+            assert!(came, "seed {seed}: no visit in the first 20 s");
+        }
+    }
+
+    #[test]
+    fn docked_cleaner_clears_bottom_cookies_without_penalty() {
+        let mut w = with_cleaner(1);
+        w.player.lane = 0;
+        w.player.pos = 0.0;
+        w.cleaner.state = cleaner::CleanerState::Docked { t: 5.0 };
+        w.cleaner.x = cleaner::DOCK_X;
+        put_cookie(&mut w, 3, CATCH_X - 0.5);
+        run(&mut w, 1.0);
+        assert!(
+            w.events.contains(&Event::CleanerAte),
+            "events: {:?}",
+            w.events
+        );
         assert_eq!(w.lives, START_LIVES);
         assert_eq!(w.phase, Phase::Play);
     }

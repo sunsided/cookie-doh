@@ -21,6 +21,8 @@ pub struct Art {
     pub jar_front: Sprite,
     pub spider: [Sprite; 2],
     pub lock: Sprite,
+    /// The Cache Cleaner, facing right.
+    pub cleaner: Sprite,
     pub moon: Sprite,
 }
 
@@ -48,6 +50,7 @@ impl Art {
             jar_front: Sprite::parse(JAR_FRONT),
             spider: [Sprite::parse(SPIDER_A), Sprite::parse(SPIDER_B)],
             lock: Sprite::parse(LOCK),
+            cleaner: Sprite::parse(CLEANER),
             moon: Sprite::parse(MOON),
         }
     }
@@ -217,6 +220,20 @@ const SPIDER_B: &str = "
     .k..kvwvwvk..k.
     k..k.......k..k
     ...k.......k...
+";
+
+/// Side view with a face display; eyes, status LED and brush are drawn on top.
+const CLEANER: &str = "
+    .......zzzzzzzz.......
+    ....zzwwwwwwwwwwzz....
+    ..zzwwppppppppppwwzz..
+    .zwppppkkkkkkkkppppwz.
+    zwpppppkiikkiikpppppwz
+    zppppppkkkkkkkkppppppz
+    zTTTTTTTTTTTTTTTTTTTTz
+    zAAAAAAAAAAAAAAAAAAAAz
+    .zzzzzzzzzzzzzzzzzzzz.
+    ...kzk..........kzk...
 ";
 
 const LOCK: &str = "
