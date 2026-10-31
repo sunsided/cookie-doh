@@ -1,10 +1,12 @@
 //! Pixel graphics: a fixed-size RGB framebuffer and the primitives the renderer draws with.
 
 pub mod font;
+mod mask;
 pub mod palette;
 pub mod png;
 pub mod sprite;
 
+pub use mask::Mask;
 pub use palette::Rgb;
 pub use sprite::Sprite;
 

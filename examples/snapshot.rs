@@ -22,9 +22,17 @@ fn main() {
     };
 
     let mut title = Title::new();
-    title.update(1.3);
+    for _ in 0..78 {
+        title.update(1.0 / 60.0);
+    }
     r.draw_title(&mut s, &title, 12340);
     save(&s, "title");
+    // The spider's visit, every ten seconds.
+    for _ in 0..(6.8 * 60.0) as usize {
+        title.update(1.0 / 60.0);
+    }
+    r.draw_title(&mut s, &title, 12340);
+    save(&s, "title_spider");
 
     // Let a bot play a while so the belts fill up naturally.
     let mut w = World::new(42);

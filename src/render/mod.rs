@@ -27,7 +27,7 @@ impl Default for Renderer {
 }
 
 /// Deterministic per-pixel hash for twinkles and blinking LEDs.
-fn hash(a: i32, b: i32) -> u32 {
+pub(crate) fn hash(a: i32, b: i32) -> u32 {
     let mut h = (a as u32).wrapping_mul(0x9e37_79b1) ^ (b as u32).wrapping_mul(0x85eb_ca77);
     h ^= h >> 15;
     h = h.wrapping_mul(0xc2b2_ae3d);
@@ -159,65 +159,12 @@ impl Renderer {
     }
 
     fn belt(&self, s: &mut Screen, w: &World, lane: usize) {
-        let y = LANE_Y[lane] as i32;
-        let (x0, x1) = (BELT_START_X as i32 - 4, BELT_END_X as i32);
-        let phase = w.belt_phase[lane];
-        let off = phase as i32 % 6;
-        s.hline(x0, x1 - 1, y, GREY);
-        for x in (x0 + off..x1).step_by(6) {
-            s.vline(x, y + 1, y + 4, GREY_LT.scale(0.7));
-            s.put(x, y, GREY_LT);
-            s.put(x + 1, y + 2, BLACK);
-        }
-        for cx in [x0 + 2, x1 - 3] {
-            s.fill_circle(cx, y + 3, 3, GREY);
-            s.circle_outline(cx, y + 3, 3, GREY_LT);
-            let a = phase / 3.0;
-            s.put(
-                cx + (a.cos() * 2.0).round() as i32,
-                y + 3 + (a.sin() * 2.0).round() as i32,
-                BLACK,
-            );
-            s.put(cx, y + 3, GREY_DK);
-        }
+        belt_at(s, LANE_Y[lane] as i32, w.belt_phase[lane]);
     }
 
-    /// A website window with a face that spits the cookies.
     fn site(&self, s: &mut Screen, fx: &Fx, lane: usize, t: f32) {
-        let y = LANE_Y[lane] as i32;
-        let (x, top, ww, wh) = (13, y - 27, 28, 24);
-        let (name, bar) = SITES[lane];
-        // Shadow, frame, title bar.
-        s.fill_rect(x + 2, top + 2, ww, wh, BLACK);
-        s.bevel(x, top, ww, wh, WHITE, PALE, GREY);
-        s.fill_rect(x + 1, top + 1, ww - 2, 6, bar);
-        s.hline(x + 1, x + ww - 2, top + 1, bar.lerp(WHITE, 0.4));
-        font::draw(s, Font::Tiny, x + 3, top + 2, name, WHITE);
-
-        let spat = fx.spat[lane];
         let blink = (t * 0.6 + lane as f32 * 0.37).fract() < 0.04;
-        // Eyes.
-        let ey = top + 10;
-        for ex in [x + 6, x + 16] {
-            if blink {
-                s.hline(ex, ex + 2, ey + 1, NAVY);
-            } else {
-                s.fill_rect(ex, ey, 3, 3, NAVY);
-                s.put(ex, ey, WHITE);
-            }
-        }
-        // Mouth: wide open right after a spit, a smug grin otherwise.
-        let (mx, my) = (x + 13, top + 15);
-        if spat < 0.3 {
-            s.fill_rect(mx - 1, my - 1, 9, 6, NAVY);
-            s.fill_rect(mx + 1, my + 2, 5, 2, RED);
-            s.fill_circle(x + 5, my + 1, 1, PINK);
-            s.fill_circle(x + 23, my + 1, 1, PINK);
-        } else {
-            s.hline(mx + 1, mx + 5, my + 2, NAVY);
-            s.put(mx, my + 1, NAVY);
-            s.put(mx + 6, my + 1, NAVY);
-        }
+        site_at(s, LANE_Y[lane] as i32, SITES[lane], fx.spat[lane], blink);
     }
 
     fn cookie(&self, s: &mut Screen, kind: CookieKind, x: f32, y: f32) {
@@ -535,4 +482,62 @@ pub fn dialog(s: &mut Screen, x: i32, y: i32, w: i32, h: i32, title: &str) {
     s.fill_rect(x + 2, y + 2, w - 4, 11, BLUE_DK);
     s.hline(x + 2, x + w - 3, y + 2, BLUE_LT);
     font::draw_centered_shadow(s, Font::Normal, x + w / 2, y + 4, title, WHITE, NAVY);
+}
+
+/// Moving treads and rollers of a belt whose top surface is at `y`; `phase` is the distance
+/// it has travelled.
+pub(crate) fn belt_at(s: &mut Screen, y: i32, phase: f32) {
+    let (x0, x1) = (BELT_START_X as i32 - 4, BELT_END_X as i32);
+    let off = phase as i32 % 6;
+    s.hline(x0, x1 - 1, y, GREY);
+    for x in (x0 + off..x1).step_by(6) {
+        s.vline(x, y + 1, y + 4, GREY_LT.scale(0.7));
+        s.put(x, y, GREY_LT);
+        s.put(x + 1, y + 2, BLACK);
+    }
+    for cx in [x0 + 2, x1 - 3] {
+        s.fill_circle(cx, y + 3, 3, GREY);
+        s.circle_outline(cx, y + 3, 3, GREY_LT);
+        let a = phase / 3.0;
+        s.put(
+            cx + (a.cos() * 2.0).round() as i32,
+            y + 3 + (a.sin() * 2.0).round() as i32,
+            BLACK,
+        );
+        s.put(cx, y + 3, GREY_DK);
+    }
+}
+
+/// A website window with a face that spits cookies onto the belt at `y`. `spat` is the time
+/// since its last spit (mouth wide open for a moment).
+pub(crate) fn site_at(s: &mut Screen, y: i32, (name, bar): (&str, Rgb), spat: f32, blink: bool) {
+    let (x, top, ww, wh) = (13, y - 27, 28, 24);
+    // Shadow, frame, title bar.
+    s.fill_rect(x + 2, top + 2, ww, wh, BLACK);
+    s.bevel(x, top, ww, wh, WHITE, PALE, GREY);
+    s.fill_rect(x + 1, top + 1, ww - 2, 6, bar);
+    s.hline(x + 1, x + ww - 2, top + 1, bar.lerp(WHITE, 0.4));
+    font::draw(s, Font::Tiny, x + 3, top + 2, name, WHITE);
+
+    let ey = top + 10;
+    for ex in [x + 6, x + 16] {
+        if blink {
+            s.hline(ex, ex + 2, ey + 1, NAVY);
+        } else {
+            s.fill_rect(ex, ey, 3, 3, NAVY);
+            s.put(ex, ey, WHITE);
+        }
+    }
+    // Mouth: wide open right after a spit, a smug grin otherwise.
+    let (mx, my) = (x + 13, top + 15);
+    if spat < 0.3 {
+        s.fill_rect(mx - 1, my - 1, 9, 6, NAVY);
+        s.fill_rect(mx + 1, my + 2, 5, 2, RED);
+        s.fill_circle(x + 5, my + 1, 1, PINK);
+        s.fill_circle(x + 23, my + 1, 1, PINK);
+    } else {
+        s.hline(mx + 1, mx + 5, my + 2, NAVY);
+        s.put(mx, my + 1, NAVY);
+        s.put(mx + 6, my + 1, NAVY);
+    }
 }

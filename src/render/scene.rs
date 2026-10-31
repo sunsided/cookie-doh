@@ -38,7 +38,7 @@ pub fn paint(s: &mut Screen, art: &Art) {
     meter_tube(s, art);
 }
 
-fn wall(s: &mut Screen) {
+pub(crate) fn wall(s: &mut Screen) {
     s.gradient_rect(0, HUD_H, W, H - HUD_H, NIGHT, NAVY, 5);
     // Riveted wall panels.
     for x in (0..W).step_by(40) {
@@ -143,43 +143,51 @@ fn floor(s: &mut Screen) {
     s.hline(0, W, y + 1, STEEL);
 }
 
-fn webs(s: &mut Screen) {
+pub(crate) fn webs(s: &mut Screen) {
     // Cobwebs in the top corners: the World Wide Web, literally.
-    let corners = [(40, HUD_H, 1), (247, HUD_H, -1)];
-    for (cx, cy, dir) in corners {
-        let c = PALE.scale(0.55);
-        for k in 0..5 {
-            let ang = k as f32 * 0.39;
-            let (ex, ey) = (
-                cx + (dir as f32 * 26.0 * ang.cos()) as i32,
-                cy + (26.0 * ang.sin()) as i32,
+    web(s, 40, HUD_H, 1, 26.0);
+    web(s, 247, HUD_H, -1, 26.0);
+}
+
+/// A quarter cobweb anchored in a corner at `cx, cy`, opening right (`dir = 1`) or left.
+pub(crate) fn web(s: &mut Screen, cx: i32, cy: i32, dir: i32, size: f32) {
+    let c = PALE.scale(0.55);
+    for k in 0..5 {
+        let ang = k as f32 * 0.39;
+        let (ex, ey) = (
+            cx + (dir as f32 * size * ang.cos()) as i32,
+            cy + (size * ang.sin()) as i32,
+        );
+        s.line(cx, cy, ex, ey, c);
+    }
+    for f in [0.27f32, 0.5, 0.73, 0.92] {
+        let r = size * f;
+        let mut prev = None;
+        for k in 0..=8 {
+            let ang = k as f32 * 0.196;
+            let rr = r - (k % 2) as f32 * 1.5;
+            let p = (
+                cx + (dir as f32 * rr * ang.cos()) as i32,
+                cy + (rr * ang.sin()) as i32,
             );
-            s.line(cx, cy, ex, ey, c);
-        }
-        for r in [7.0f32, 13.0, 19.0, 24.0] {
-            let mut prev = None;
-            for k in 0..=8 {
-                let ang = k as f32 * 0.196;
-                let rr = r - (k % 2) as f32 * 1.5;
-                let p = (
-                    cx + (dir as f32 * rr * ang.cos()) as i32,
-                    cy + (rr * ang.sin()) as i32,
-                );
-                if let Some((px, py)) = prev {
-                    s.line(px, py, p.0, p.1, c);
-                }
-                prev = Some(p);
+            if let Some((px, py)) = prev {
+                s.line(px, py, p.0, p.1, c);
             }
+            prev = Some(p);
         }
     }
 }
 
 fn belt_frame(s: &mut Screen, lane: usize) {
-    let y = LANE_Y[lane] as i32;
+    belt_frame_at(s, LANE_Y[lane] as i32, lane == LANES - 1);
+}
+
+/// The static parts of a belt at `y`: bed, hazard rail, and wall brackets (or floor legs).
+pub(crate) fn belt_frame_at(s: &mut Screen, y: i32, legs: bool) {
     let (x0, x1) = (BELT_START_X as i32 - 4, BELT_END_X as i32);
     // Brackets holding the belt to the wall (the bottom lane stands on legs).
     for bx in (x0 + 24..x1 - 10).step_by(54) {
-        if lane == LANES - 1 {
+        if legs {
             s.fill_rect(bx, y + 7, 3, FLOOR_Y as i32 - y - 7, SLATE);
             s.vline(bx, y + 7, FLOOR_Y as i32 - 1, STEEL);
             s.fill_rect(bx - 2, FLOOR_Y as i32 - 2, 7, 2, STEEL);

@@ -34,6 +34,22 @@ impl Font {
         }
     }
 
+    /// `s` rendered as a 1-bit mask at 1x (glyphs one pixel apart), for logo processing.
+    pub fn mask(self, s: &str) -> super::Mask {
+        let mut m = super::Mask::new(self.measure(s, 1).max(1), self.height());
+        for (i, ch) in s.chars().enumerate() {
+            let Some(rows) = self.glyph(ch) else { continue };
+            for (ry, row) in rows.iter().enumerate() {
+                for (rx, bit) in row.chars().enumerate() {
+                    if bit == '#' {
+                        m.set(i as i32 * self.advance() + rx as i32, ry as i32, true);
+                    }
+                }
+            }
+        }
+        m
+    }
+
     /// Width of `s` in pixels at `scale`.
     pub fn measure(self, s: &str, scale: i32) -> i32 {
         let n = s.chars().count() as i32;
