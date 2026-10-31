@@ -660,7 +660,6 @@ impl Renderer {
                 font::draw(s, Font::Tiny, hx, y + 28, "OR CLICK A BUTTON", GREY);
             }
         }
-        s.hline(8, W - 9, y + 36, GREY_LT);
         font::draw(s, Font::Tiny, 20, y + 38, "(C) 2026 MARKUS MAYER", GREY);
         font::draw(s, Font::Tiny, hx, y + 38, "M MUTE  C CRT  ESC QUIT", GREY);
     }
