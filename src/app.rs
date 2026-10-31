@@ -3,10 +3,12 @@
 use game_toolkit::prelude::*;
 use winit::event::{TouchPhase, WindowEvent};
 
+use crate::gfx::modes::Converter;
 use crate::gfx::{H, Screen, W};
 use crate::logic::layout::{LANE_Y, LANES};
 use crate::logic::{CookieKind, DohCause, Event, Phase, World};
 use crate::platform;
+use crate::render::cracktro::Cracktro;
 use crate::render::fx::Fx;
 use crate::render::title::{Title, TitleAction};
 use crate::render::{GameView, Renderer};
@@ -19,6 +21,7 @@ const SFX_VOLUME: f32 = 0.6;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Mode {
+    Cracktro,
     Title,
     Play,
     Over,
@@ -112,7 +115,19 @@ pub struct CookieDoh {
     /// Touches don't reach the toolkit's `Input`; they're queued from `raw_window_event`.
     taps: Vec<(f32, f32)>,
     t: f32,
+    cracktro: Cracktro,
+    /// Reduces frames to the selected historical [`crate::gfx::modes::GfxMode`].
+    gfx: Converter,
+    /// Seconds left on the "graphics mode" banner.
+    toast_t: f32,
+    /// Audio was running last frame (on the web it starts on the first key press, which must
+    /// not also skip the cracktro).
+    sound_was_on: bool,
+    /// A cracktro key press was already spent on unlocking audio.
+    unlock_press_spent: bool,
 }
+
+const CRACKTRO_VOLUME: f32 = 0.24;
 
 impl CookieDoh {
     fn sound(&self, audio: &mut Option<Audio>, pcm: &[f32], volume: f32) {
@@ -134,9 +149,41 @@ impl CookieDoh {
         self.music.play(&mut ctx.audio, songs::game());
     }
 
+    fn goto_cracktro(&mut self, ctx: &mut Context) {
+        self.mode = Mode::Cracktro;
+        self.cracktro = Cracktro::default();
+        self.music.volume = CRACKTRO_VOLUME;
+        self.music.play(&mut ctx.audio, songs::cracktro());
+    }
+
+    fn update_cracktro(&mut self, ctx: &mut Context, dt: f32) {
+        self.cracktro.update(dt);
+        let sound_on = ctx.audio.as_ref().is_none_or(Audio::is_started);
+        let i = &ctx.input;
+        let pad = i
+            .first_gamepad()
+            .is_some_and(|p| p.button_pressed(Button::South) || p.button_pressed(Button::Start));
+        let pressed = i.key_pressed(Key::Space)
+            || i.key_pressed(Key::Enter)
+            || i.key_pressed(Key::Escape)
+            || pad
+            || !self.pointer_presses(&ctx.input).is_empty();
+        // On the web the first press only switches the sound on. Any later press skips, even
+        // if the browser never let the audio start.
+        if pressed {
+            if (self.sound_was_on && sound_on) || self.unlock_press_spent {
+                self.goto_title(ctx);
+            } else {
+                self.unlock_press_spent = true;
+            }
+        }
+        self.sound_was_on = sound_on;
+    }
+
     fn goto_title(&mut self, ctx: &mut Context) {
         self.mode = Mode::Title;
         self.title = Title::new();
+        self.music.volume = MUSIC_VOLUME;
         self.music.play(&mut ctx.audio, songs::title());
     }
 
@@ -383,6 +430,7 @@ impl CookieDoh {
 
 impl Game for CookieDoh {
     fn init(ctx: &mut Context) -> Result<Self> {
+        let options = platform::options();
         let screen = Screen::new();
         let rgba = vec![0; (W * H * 4) as usize];
         let tex = ctx
@@ -413,8 +461,17 @@ impl Game for CookieDoh {
             stick: 0,
             taps: Vec::new(),
             t: 0.0,
+            cracktro: Cracktro::default(),
+            gfx: Converter::new(options.gfx.unwrap_or_default()),
+            toast_t: 0.0,
+            sound_was_on: false,
+            unlock_press_spent: false,
         };
-        game.goto_title(ctx);
+        if options.cracktro {
+            game.goto_cracktro(ctx);
+        } else {
+            game.goto_title(ctx);
+        }
         Ok(game)
     }
 
@@ -429,7 +486,13 @@ impl Game for CookieDoh {
         if ctx.input.key_pressed(Key::KeyC) {
             self.scanlines = !self.scanlines;
         }
+        if ctx.input.key_pressed(Key::KeyG) {
+            self.gfx.set_mode(self.gfx.mode.next());
+            self.toast_t = 2.0;
+        }
+        self.toast_t = (self.toast_t - dt).max(0.0);
         match self.mode {
+            Mode::Cracktro => self.update_cracktro(ctx, dt),
             Mode::Title => self.update_title(ctx, dt),
             Mode::Play => self.update_play(ctx, dt),
             Mode::Over => self.update_over(ctx, dt),
@@ -458,6 +521,12 @@ impl Game for CookieDoh {
 
     fn render(&mut self, ctx: &mut Context, frame: &mut Frame) {
         match self.mode {
+            Mode::Cracktro => {
+                let sound_on =
+                    ctx.audio.as_ref().is_none_or(Audio::is_started) || self.unlock_press_spent;
+                self.renderer
+                    .draw_cracktro(&mut self.screen, &self.cracktro, sound_on);
+            }
             Mode::Title => self
                 .renderer
                 .draw_title(&mut self.screen, &self.title, self.hiscore),
@@ -481,7 +550,14 @@ impl Game for CookieDoh {
                 }
             }
         }
-        self.screen.to_rgba(&mut self.rgba, self.fx.flash);
+        if self.toast_t > 0.0 {
+            crate::render::toast(&mut self.screen, self.gfx.mode.blurb());
+        }
+        if let Some((c, a)) = self.fx.flash {
+            self.screen.tint(c, a);
+        }
+        self.gfx.apply(&mut self.screen);
+        self.screen.to_rgba(&mut self.rgba, None);
         ctx.gfx.update_texture_rgba(self.tex, &self.rgba);
 
         let (ww, wh) = ctx.gfx.size();

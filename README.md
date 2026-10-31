@@ -23,7 +23,36 @@ must be accepted**. Drop one and it crumbles on the floor: *"D'oh!"* (with a sad
 - **Golden cookies** are worth 10x. Ten cookies fill the jar for a bonus.
 - Three D'ohs and your session expires.
 - **P** / Esc pause; **Esc** again while paused quits to the title (Esc on the title quits
-  the game). **M** mute, **C** toggle scanlines.
+  the game). **G** cycle graphics modes, **M** mute, **C** toggle scanlines.
+
+## Silly extras
+
+- **Cracktro:** start with `cargo run -- --cracktro`, or open the web build with
+  `?cracktro`. *Cookies & Crackers* proudly present... with copper bars, a parallax
+  starfield, a wobbling logo, cookie bobs and a sine scroller. Space skips (in the browser
+  the first key press only switches the sound on).
+- **Graphics modes:** press **G** in-game, or start with `--gfx=ega` / `?gfx=ega`. Every
+  frame is reduced to real hardware palettes with ordered dithering:
+
+  | Mode | Looks like |
+  |------|-----------|
+  | `vga` | the game as drawn (default) |
+  | `ega` | IBM EGA, 16 fixed colors |
+  | `c64` | Commodore 64 multicolor: 16 colors, double-wide pixels, hi-res status bar |
+  | `cga` | IBM CGA palette 1: black, cyan, magenta, white. Sorry. |
+  | `hercules` | 1-bit amber monochrome |
+
+  Options combine: `?cracktro&gfx=c64`.
+
+![The Cookies & Crackers cracktro](docs/screenshots/cracktro.png)
+
+| | |
+|---|---|
+| ![EGA](docs/screenshots/play_ega.png) | ![C64](docs/screenshots/play_c64.png) |
+| ![CGA](docs/screenshots/play_cga.png) | ![Hercules](docs/screenshots/play_hercules.png) |
+
+Shortcuts: `task run:cracked` (alias `intro`), `task run:ega` / `run:c64` / `run:cga` /
+`run:hercules`, `task run:retro` (cracktro, then C64), or `task run GFX=cga`.
 
 ## Screenshots
 

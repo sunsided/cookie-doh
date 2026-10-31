@@ -21,6 +21,15 @@ fn main() {
         println!("{path}");
     };
 
+    let mut intro = cookie_doh::render::cracktro::Cracktro::default();
+    for (name, secs) in [("cracktro", 3.2), ("cracktro_2", 7.4)] {
+        while intro.t < secs {
+            intro.update(1.0 / 60.0);
+        }
+        r.draw_cracktro(&mut s, &intro, true);
+        save(&s, name);
+    }
+
     let mut title = Title::new();
     for _ in 0..78 {
         title.update(1.0 / 60.0);
@@ -67,6 +76,19 @@ fn main() {
         save(s, name);
     };
     shot(&mut s, &w, &fx, "play");
+    for mode in cookie_doh::gfx::modes::GfxMode::ALL.into_iter().skip(1) {
+        r.draw_game(
+            &mut s,
+            &GameView {
+                world: &w,
+                fx: &fx,
+                t: w.time,
+                paused: false,
+            },
+        );
+        cookie_doh::gfx::modes::Converter::new(mode).apply(&mut s);
+        save(&s, &format!("play_{}", mode.name().to_lowercase()));
+    }
 
     let mut w2 = w.clone();
     w2.spider = SpiderState::Down {
@@ -126,6 +148,7 @@ fn main() {
     };
     music("title", cookie_doh::sound::songs::title());
     music("game", cookie_doh::sound::songs::game());
+    music("cracktro", cookie_doh::sound::songs::cracktro());
     for (name, pcm) in [
         ("doh", &bank.doh),
         ("accept", &bank.accept),

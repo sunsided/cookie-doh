@@ -1,7 +1,9 @@
 //! Draws the game into the 320x200 framebuffer.
 
 pub mod art;
+pub mod cracktro;
 pub mod fx;
+pub(crate) mod logo;
 pub mod scene;
 pub mod title;
 
@@ -18,6 +20,7 @@ use crate::logic::{CookieKind, CookieState, DohCause, JAR_CAPACITY, Phase, Spide
 pub struct Renderer {
     pub art: Art,
     bg: Screen,
+    crack: cracktro::CracktroArt,
 }
 
 impl Default for Renderer {
@@ -51,7 +54,11 @@ impl Renderer {
         let art = Art::new();
         let mut bg = Screen::new();
         scene::paint(&mut bg, &art);
-        Self { art, bg }
+        Self {
+            art,
+            bg,
+            crack: cracktro::CracktroArt::new(),
+        }
     }
 
     pub fn draw_game(&self, s: &mut Screen, v: &GameView<'_>) {
@@ -514,6 +521,15 @@ impl Renderer {
             _ => {}
         }
     }
+}
+
+/// A centered banner over the bottom of the screen, e.g. when the graphics mode changes.
+pub fn toast(s: &mut Screen, text: &str) {
+    let w = Font::Normal.measure(text, 1) + 12;
+    let x = 160 - w / 2;
+    s.fill_rect(x, 182, w, 13, BLACK);
+    s.rect_outline(x, 182, w, 13, YELLOW);
+    font::draw_centered(s, Font::Normal, 160, 185, text, YELLOW);
 }
 
 /// Blinking "!" next to the jar spot of `lane`: something is coming for it.

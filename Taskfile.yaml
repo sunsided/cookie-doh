@@ -4,6 +4,9 @@ version: '3'
 vars:
   PROFILE: '{{ .PROFILE | default "debug" }}'
   PROFILE_FLAG: '{{ if eq .PROFILE "release" }}--release{{ end }}'
+  # Graphics mode for the run tasks: vga (default), ega, c64, cga, hercules.
+  GFX: '{{ .GFX | default "" }}'
+  GFX_MODES: vga ega c64 cga hercules
 
 tasks:
   default:
@@ -23,12 +26,59 @@ tasks:
       - cargo run -q --release --example snapshot -- snapshots
 
   run:
-    desc: Run the game (PROFILE=debug|release)
-    preconditions:
+    desc: Run the game (PROFILE=debug|release, GFX=ega|c64|cga|hercules)
+    vars:
+      # Derived here, not globally, so callers passing GFX (run:ega, ...) are honoured.
+      GFX_FLAG: '{{ if .GFX }}--gfx={{ .GFX }}{{ end }}'
+      INTRO_FLAG: '{{ if .INTRO }}--cracktro{{ end }}'
+    preconditions: &run-preconditions
       - sh: command -v cargo
         msg: "cargo not found — install Rust from https://rustup.rs/"
+      - sh: test -z "{{.GFX}}" || echo "{{.GFX_MODES}}" | tr ' ' '\n' | grep -qx "{{.GFX}}"
+        msg: "unknown GFX={{.GFX}} — use one of: {{.GFX_MODES}}"
     cmds:
-      - cargo run {{.PROFILE_FLAG}} -- {{.CLI_ARGS}}
+      - cargo run {{.PROFILE_FLAG}} -- {{.INTRO_FLAG}} {{.GFX_FLAG}} {{.CLI_ARGS}}
+
+  run:cracked:
+    desc: Run with the Cookies & Crackers cracktro first (combines with GFX=...)
+    aliases: [cracked, intro, run:cracktro]
+    cmds:
+      - task: run
+        vars: { INTRO: "1", GFX: "{{.GFX}}" }
+
+  run:ega:
+    desc: Run in EGA mode (16 colors)
+    aliases: [ega]
+    cmds:
+      - task: run
+        vars: { GFX: ega }
+
+  run:c64:
+    desc: Run in C64 mode (16 colors, fat pixels)
+    aliases: [c64]
+    cmds:
+      - task: run
+        vars: { GFX: c64 }
+
+  run:cga:
+    desc: Run in CGA mode (cyan, magenta, white - sorry)
+    aliases: [cga]
+    cmds:
+      - task: run
+        vars: { GFX: cga }
+
+  run:hercules:
+    desc: Run in Hercules mode (amber monochrome)
+    aliases: [hercules, hgc]
+    cmds:
+      - task: run
+        vars: { GFX: hercules }
+
+  run:retro:
+    desc: The full experience - cracktro, then C64 mode
+    cmds:
+      - task: run
+        vars: { INTRO: "1", GFX: c64 }
 
   build:
     desc: Build (PROFILE=debug|release)
@@ -74,6 +124,7 @@ tasks:
         msg: "wasm target missing — run: rustup target add wasm32-unknown-unknown"
     deps: [assets:manifest]
     cmds:
+      - echo "Open http://localhost:8080/ (add ?cracktro and/or ?gfx=ega|c64|cga|hercules, e.g. ?cracktro&gfx=c64)"
       - trunk serve {{.PROFILE_FLAG}} {{.CLI_ARGS}}
 
   web:build:

@@ -2,6 +2,7 @@
 
 pub mod font;
 mod mask;
+pub mod modes;
 pub mod palette;
 pub mod png;
 pub mod sprite;
@@ -236,6 +237,13 @@ impl Screen {
     pub fn blit_outline(&mut self, s: &Sprite, x: i32, y: i32, c: Rgb) {
         for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
             self.blit_ex(s, x + dx, y + dy, false, Some(c));
+        }
+    }
+
+    /// Mix every pixel towards `c` by `a` (a full-screen flash).
+    pub fn tint(&mut self, c: Rgb, a: f32) {
+        for p in &mut self.px {
+            *p = p.lerp(c, a);
         }
     }
 

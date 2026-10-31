@@ -183,3 +183,83 @@ pub fn sad_trombone() -> Song {
         channels: vec![Channel::new(Some(horn), "G3 . F#3 . F3 . E3 . . . -")],
     }
 }
+
+/// `pattern` delayed by `rows`, wrapping around: the classic C64 trick of a second, quieter
+/// channel playing the lead a few rows late as an echo.
+fn delayed(pattern: &str, rows: usize) -> String {
+    let mut t: Vec<&str> = pattern.split_whitespace().filter(|t| *t != "|").collect();
+    let n = rows.min(t.len());
+    t.rotate_right(n);
+    t.join(" ")
+}
+
+/// The cracktro: wistful A minor, no hi-hats, nothing that grates on loop number ten.
+pub fn cracktro() -> Song {
+    let lead = "A4 . C5 . E5 . D5 C5 | C5 . A4 . F4 . G4 A4 |
+                G4 . E4 . G4 . C5 . | B4 . A4 . G4 . - . |
+                E5 . A5 . G5 . E5 D5 | C5 . F5 . E5 . C5 A4 |
+                G4 . C5 . E5 . G5 . | F5 . E5 . D5 . B4 - |";
+    let voice = Instrument {
+        attack: 0.01,
+        decay: 3.0,
+        sustain: 0.5,
+        release: 6.0,
+        vibrato: (0.2, 5.0, 0.2),
+        ..Instrument::new(Wave::Pulse(0.5), 0.2)
+    };
+    let echo = Instrument {
+        volume: 0.07,
+        ..voice
+    };
+    let pad = Instrument {
+        sustain: 0.5,
+        decay: 2.0,
+        release: 4.0,
+        ..Instrument::new(Wave::Pulse(0.125), 0.09)
+    };
+    let soft_bass = Instrument {
+        volume: 0.45,
+        release: 10.0,
+        ..bass()
+    };
+    Song {
+        rpm: 200.0,
+        looped: true,
+        gain: 0.9,
+        channels: vec![
+            Channel::new(Some(voice), lead),
+            Channel::new(Some(echo), &delayed(lead, 3)),
+            Channel::new(
+                Some(pad),
+                "A3^037 . . . . . . . | F3^047 . . . . . . . | C4^047 . . . . . . . | G3^047 . . . . . . . |
+                 A3^037 . . . . . . . | F3^047 . . . . . . . | C4^047 . . . . . . . | G3^047 . . . . . . . |",
+            ),
+            Channel::new(
+                Some(soft_bass),
+                "A1 . A2 . A1 . E2 . | F1 . F2 . F1 . C2 . | C2 . C3 . C2 . G1 . | G1 . G2 . G1 . D2 . |
+                 A1 . A2 . A1 . E2 . | F1 . F2 . F1 . C2 . | C2 . C3 . C2 . G1 . | G1 . G2 . G1 . D2 . |",
+            ),
+            Channel::new(
+                None,
+                "k . . . s . . . | k . . . s . . . | k . . . s . . . | k . . k s . . . |
+                 k . . . s . . . | k . . . s . . . | k . . . s . . . | k . . k s . s . |",
+            ),
+        ],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn echo_is_the_lead_rotated() {
+        assert_eq!(super::delayed("A4 . | B4 C5", 1), "C5 A4 . B4");
+    }
+
+    #[test]
+    fn all_songs_have_equal_channel_lengths() {
+        for song in [super::game(), super::title(), super::cracktro()] {
+            let lens: Vec<usize> = song.channels.iter().map(|c| c.rows.len()).collect();
+            assert!(lens.windows(2).all(|w| w[0] == w[1]), "{lens:?}");
+        }
+    }
+}

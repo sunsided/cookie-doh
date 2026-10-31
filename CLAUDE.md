@@ -319,3 +319,7 @@ references: `01_window`, `02_sprite`, `03_primitives`, `04_text`, `05_tilemap`, 
   `Audio::play_stream`, SFX are pre-rendered PCM played with `play_samples`.
 - Check art and audio headlessly: `task snapshot` (PNGs + WAVs in `snapshots/`).
 - Canvas id is `cookie-doh`; Trunk runs with `filehash = false`.
+- Launch options (`platform::Options`): `--cracktro`, `--gfx=<mode>` natively; the same as a
+  URL query on the web (`?cracktro&gfx=cga`).
+- Graphics modes (`gfx::modes`) post-process the finished frame: draw everything in the
+  normal palette and let the `Converter` reduce it. Toasts and flashes go in before it.
