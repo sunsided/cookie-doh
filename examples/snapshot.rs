@@ -75,6 +75,8 @@ fn main() {
     };
     shot(&mut s, &w2, &fx, "spider_down");
     w2.spider = SpiderState::Hang { lane: 0, t: 1.0 };
+    w2.player.lane = 3;
+    w2.player.pos = 3.0;
     w2.popup = Some(cookie_doh::logic::Popup { lane: 1, age: 1.0 });
     shot(&mut s, &w2, &fx, "popup");
 
