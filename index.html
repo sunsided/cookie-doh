@@ -7,6 +7,8 @@
     <!-- trunk: build the crate to wasm and copy the asset folder next to it. -->
     <link data-trunk rel="rust" data-bin="cookie-doh" />
     <link data-trunk rel="copy-dir" href="assets" />
+    <!-- Dependency license notices ship with every web build (regenerate: task licenses). -->
+    <link data-trunk rel="copy-file" href="THIRD_PARTY_LICENSES.html" />
     <style>
       html, body { margin: 0; height: 100%; background: #000; }
       body { display: flex; align-items: center; justify-content: center; }

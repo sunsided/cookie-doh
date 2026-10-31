@@ -5,6 +5,8 @@ edition = "2024"
 rust-version = "1.95"
 description = "Cookie D'oh! - Accept all Cookies. A silly 8/16-bit era arcade game."
 license = "EUPL-1.2"
+authors = ["Markus Mayer"]
+repository = "https://github.com/sunsided/cookie-doh"
 publish = false
 
 [dependencies]

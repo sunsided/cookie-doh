@@ -318,6 +318,9 @@ references: `01_window`, `02_sprite`, `03_primitives`, `04_text`, `05_tilemap`, 
 - `src/sound/`: all audio synthesized; no asset files. Music streams through
   `Audio::play_stream`, SFX are pre-rendered PCM played with `play_samples`.
 - Check art and audio headlessly: `task snapshot` (PNGs + WAVs in `snapshots/`).
+- Modules use `name.rs` + `name/` (no `mod.rs`).
+- After changing dependencies, run `task licenses` and commit `THIRD_PARTY_LICENSES.html`;
+  web builds and `web:export` ship it.
 - Canvas id is `cookie-doh`; Trunk runs with `filehash = false`.
 - Launch options (`platform::Options`): `--cracktro`, `--gfx=<mode>` natively; the same as a
   URL query on the web (`?cracktro&gfx=cga`).

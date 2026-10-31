@@ -17,10 +17,21 @@ tasks:
     silent: true
 
   setup:
-    desc: Install the wasm target and trunk (skips what's already there)
+    desc: Install the wasm target, trunk and cargo-about (skips what's already there)
     cmds:
       - rustup target add wasm32-unknown-unknown
       - sh -c 'command -v trunk >/dev/null || cargo install trunk --locked'
+      - sh -c 'command -v cargo-about >/dev/null || cargo install cargo-about --locked --features cli'
+
+  licenses:
+    desc: Regenerate THIRD_PARTY_LICENSES.html (notices for every bundled dependency)
+    preconditions:
+      - sh: command -v cargo-about
+        msg: "cargo-about not found — run: cargo install cargo-about --locked --features cli"
+    sources: [Cargo.lock, about.toml, about.hbs]
+    generates: [THIRD_PARTY_LICENSES.html]
+    cmds:
+      - cargo about generate about.hbs -o THIRD_PARTY_LICENSES.html
 
   snapshot:
     desc: Render every screen to PNG and the audio to WAV in snapshots/ (no window)
@@ -145,7 +156,7 @@ tasks:
       # Own dist dir, so a running `task web` doesn't clobber it mid-copy.
       - trunk build --release --dist target/web-release
       - mkdir -p "{{.DEST}}"
-      - cp target/web-release/cookie-doh.js target/web-release/cookie-doh_bg.wasm "{{.DEST}}/"
+      - cp target/web-release/cookie-doh.js target/web-release/cookie-doh_bg.wasm target/web-release/THIRD_PARTY_LICENSES.html "{{.DEST}}/"
       - echo "Exported to {{.DEST}} - embed with embed/CookieDoh.svelte (base = its URL path)"
 
   assets:manifest:
