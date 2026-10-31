@@ -10,7 +10,8 @@ four conveyor belts. You ride the lift at the end of the line with a jar, and **
 must be accepted**. Drop one and it crumbles on the floor: *"D'oh!"* (with a sad trombone).
 
 - **Up / Down** (W/S, J/K, 1-4, D-pad, or tap a belt): ride the lift.
-- A cookie tipping off the belt can still land in your jar if you're parked further down.
+- A cookie tipping off the belt drops onto the end of the belt below and smashes there -
+  unless you're parked exactly one lane down: that dive-save pays double.
 - **Space** (Enter, pad A): *Accept all* - dismisses the cookie-consent popups that cover
   the belts from level 2 on.
 - **The Web Crawler** drops down to the jar spot of a random lane (watch for the red `!`).

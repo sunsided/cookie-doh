@@ -311,8 +311,14 @@ impl CookieDoh {
             Event::Moved => self.sound(audio, &b.step, 0.35),
             Event::Accepted {
                 kind: CookieKind::Plain,
+                saved: false,
                 ..
             } => self.sound(audio, &b.accept, 0.8),
+            Event::Accepted {
+                kind: CookieKind::Plain,
+                saved: true,
+                ..
+            } => self.sound(audio, &b.save, 0.9),
             Event::Accepted {
                 kind: CookieKind::Golden,
                 ..

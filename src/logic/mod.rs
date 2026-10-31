@@ -46,13 +46,15 @@ pub enum CookieState {
         t: f32,
     },
     OnBelt,
-    /// Accepted: dropping into the jar of `lane`.
+    /// Accepted: dropping into the jar of `lane`. `saved` = caught one lane down, mid-fall.
     DropIn {
         lane: usize,
         t: f32,
         from: (f32, f32),
+        saved: bool,
     },
-    /// Tipped off the end with nobody there.
+    /// Tipped off the end with nobody there. It drops onto the end of the belt below (or the
+    /// floor) and smashes there, unless the jar one lane down catches it on the way.
     Falling {
         vx: f32,
         vy: f32,
@@ -150,6 +152,8 @@ pub enum Event {
         lane: usize,
         kind: CookieKind,
         points: u32,
+        /// Caught mid-fall one lane down (pays double).
+        saved: bool,
     },
     JarFull {
         points: u32,
@@ -157,8 +161,10 @@ pub enum Event {
     TippedOff {
         lane: usize,
     },
+    /// A cookie smashed at `x, y` (on the belt end below, or the floor).
     Crumbled {
         x: f32,
+        y: f32,
         kind: CookieKind,
     },
     Doh(DohCause),
@@ -596,6 +602,7 @@ impl World {
                                 lane: c.lane,
                                 t: 0.0,
                                 from: (c.x, c.y),
+                                saved: false,
                             };
                         } else {
                             c.state = CookieState::Falling {
@@ -606,7 +613,12 @@ impl World {
                         }
                     }
                 }
-                CookieState::DropIn { lane, t, from } => {
+                CookieState::DropIn {
+                    lane,
+                    t,
+                    from,
+                    saved,
+                } => {
                     let t = t + dt;
                     let k = (t / DROP_IN_TIME).min(1.0);
                     let to = (BELT_END_X + 2.0, LANE_Y[lane] + 2.0);
@@ -615,7 +627,12 @@ impl World {
                     if k >= 1.0 {
                         accepted.push(i);
                     } else {
-                        c.state = CookieState::DropIn { lane, t, from };
+                        c.state = CookieState::DropIn {
+                            lane,
+                            t,
+                            from,
+                            saved,
+                        };
                     }
                 }
                 CookieState::Falling { vx, vy } => {
@@ -624,27 +641,31 @@ impl World {
                     c.x += vx * dt;
                     c.y += vy * dt;
                     c.state = CookieState::Falling { vx, vy };
-                    // A jar further down can still save it.
-                    if let Some(lane) = parked
-                        && lane >= c.lane
-                    {
-                        let (mouth_y, x0, x1) = Self::jar_mouth(lane);
-                        let bottom = c.y + COOKIE_SIZE;
-                        let prev_bottom = prev_y + COOKIE_SIZE;
+                    let below = c.lane + 1;
+                    let bottom = c.y + COOKIE_SIZE;
+                    if below < LANES {
+                        // Only the jar directly below is in the way: it can dive-save it.
+                        let (mouth_y, x0, x1) = Self::jar_mouth(below);
                         let cx = c.x + COOKIE_SIZE / 2.0;
-                        if prev_bottom <= mouth_y + 4.0
+                        if parked == Some(below)
+                            && prev_y + COOKIE_SIZE <= mouth_y + 4.0
                             && bottom >= mouth_y
                             && (x0..=x1).contains(&cx)
                         {
                             c.state = CookieState::DropIn {
-                                lane,
+                                lane: below,
                                 t: DROP_IN_TIME * 0.5,
                                 from: (c.x, c.y),
+                                saved: true,
                             };
                             continue;
                         }
-                    }
-                    if c.y + COOKIE_SIZE >= FLOOR_Y {
+                        // Otherwise it smashes on the end of that belt.
+                        if bottom >= LANE_Y[below] + 2.0 {
+                            c.y = LANE_Y[below] + 2.0 - COOKIE_SIZE;
+                            crumbled.push(i);
+                        }
+                    } else if bottom >= FLOOR_Y {
                         crumbled.push(i);
                     }
                 }
@@ -658,17 +679,18 @@ impl World {
                 CookieKind::Plain => 10,
                 CookieKind::Golden => 100,
             };
-            let points = base * self.level;
+            let (lane, saved) = match c.state {
+                CookieState::DropIn { lane, saved, .. } => (lane, saved),
+                _ => (c.lane, false),
+            };
+            let points = base * self.level * if saved { 2 } else { 1 };
             self.score += points;
             self.accepted += 1;
-            let lane = match c.state {
-                CookieState::DropIn { lane, .. } => lane,
-                _ => c.lane,
-            };
             self.events.push(Event::Accepted {
                 lane,
                 kind: c.kind,
                 points,
+                saved,
             });
             self.player.joy = 0.6;
             self.player.jar += 1;
@@ -691,6 +713,7 @@ impl World {
             let c = &self.cookies[i];
             self.events.push(Event::Crumbled {
                 x: c.center_x(),
+                y: c.y + COOKIE_SIZE,
                 kind: c.kind,
             });
             dropped.get_or_insert(c.lane);
@@ -775,7 +798,7 @@ mod tests {
     }
 
     #[test]
-    fn a_lower_jar_can_save_a_falling_cookie() {
+    fn the_jar_one_lane_down_saves_for_double_points() {
         let mut w = playing(1);
         w.player.lane = 2;
         w.player.pos = 2.0;
@@ -783,6 +806,36 @@ mod tests {
         run(&mut w, 1.5);
         assert_eq!(w.accepted, 1, "events: {:?}", w.events);
         assert_eq!(w.lives, START_LIVES);
+        assert_eq!(w.score, 20);
+        assert!(
+            w.events
+                .iter()
+                .any(|e| matches!(e, Event::Accepted { saved: true, .. }))
+        );
+    }
+
+    /// Camping at the bottom used to catch everything that fell; now a cookie smashes on
+    /// the end of the next belt down.
+    #[test]
+    fn jars_further_down_cannot_save() {
+        let mut w = playing(1);
+        w.player.lane = 3;
+        w.player.pos = 3.0;
+        put_cookie(&mut w, 0, CATCH_X - 0.5);
+        run(&mut w, 1.5);
+        assert_eq!(w.accepted, 0);
+        assert!(matches!(
+            w.phase,
+            Phase::Doh {
+                cause: DohCause::Dropped(0),
+                ..
+            }
+        ));
+        let y = w.events.iter().find_map(|e| match e {
+            Event::Crumbled { y, .. } => Some(*y),
+            _ => None,
+        });
+        assert_eq!(y, Some(LANE_Y[1] + 2.0), "smashes on the belt below");
     }
 
     #[test]

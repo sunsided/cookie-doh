@@ -7,6 +7,8 @@ use super::{songs, tracker, voice};
 pub struct Bank {
     pub accept: Vec<f32>,
     pub golden: Vec<f32>,
+    /// A dive-save one lane down.
+    pub save: Vec<f32>,
     pub jar_full: Vec<f32>,
     pub spit: Vec<f32>,
     pub step: Vec<f32>,
@@ -36,6 +38,7 @@ impl Bank {
                 Wave::Pulse(0.125),
                 0.15,
             ),
+            save: arpeggio(&[67, 74, 79, 83, 86], 0.03, Wave::Pulse(0.25), 0.1),
             jar_full: arpeggio(&[60, 64, 67, 72, 76, 79, 84], 0.045, Wave::Pulse(0.5), 0.25),
             spit: sweep(400.0, 900.0, 0.07, Wave::Pulse(0.5), 0.4),
             step: sweep(1200.0, 900.0, 0.025, Wave::Pulse(0.5), 0.25),

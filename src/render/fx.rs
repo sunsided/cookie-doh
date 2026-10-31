@@ -98,7 +98,12 @@ impl Fx {
         let jar_x = BELT_END_X + 6.0;
         match *e {
             Event::Spit { lane } => self.spat[lane] = 0.0,
-            Event::Accepted { lane, kind, points } => {
+            Event::Accepted {
+                lane,
+                kind,
+                points,
+                saved,
+            } => {
                 let y = LANE_Y[lane];
                 let colors: &[Rgb] = match kind {
                     CookieKind::Plain => &[WHITE, COOKIE_HI, YELLOW_LT],
@@ -106,6 +111,10 @@ impl Fx {
                 };
                 let n = if kind == CookieKind::Golden { 24 } else { 8 };
                 self.burst(jar_x, y, n, colors, 50.0, 0.0, false);
+                if saved {
+                    self.burst(jar_x, y, 16, &[CYAN_LT, WHITE, GREEN_LT], 70.0, 0.0, false);
+                    self.text(jar_x - 26.0, y - 30.0, "SAVE! X2", CYAN_LT);
+                }
                 self.text(
                     jar_x - 8.0,
                     y - 22.0,
@@ -136,12 +145,12 @@ impl Fx {
                 );
                 self.jar_glow = 0.8;
             }
-            Event::Crumbled { x, kind } => {
+            Event::Crumbled { x, y, kind } => {
                 let colors: &[Rgb] = match kind {
                     CookieKind::Plain => &[COOKIE, COOKIE_LT, BROWN, CHIP],
                     CookieKind::Golden => &[YELLOW, ORANGE, YELLOW_LT],
                 };
-                self.burst(x, FLOOR_Y - 3.0, 26, colors, 70.0, 300.0, true);
+                self.burst(x, y - 3.0, 26, colors, 70.0, 300.0, true);
                 self.shake = 0.35;
             }
             Event::Doh(cause) => {
