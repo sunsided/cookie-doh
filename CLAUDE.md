@@ -321,5 +321,9 @@ references: `01_window`, `02_sprite`, `03_primitives`, `04_text`, `05_tilemap`, 
 - Canvas id is `cookie-doh`; Trunk runs with `filehash = false`.
 - Launch options (`platform::Options`): `--cracktro`, `--gfx=<mode>` natively; the same as a
   URL query on the web (`?cracktro&gfx=cga`).
+- Host integration (`platform::notify` / `HostEvent`): `cookie-doh:start|exit|gameover` DOM
+  events on the canvas (+ `postMessage` in iframes). On the web, exit sets `dormant` instead
+  of quitting; the game is also paused/muted while the canvas is detached
+  (`platform::is_active`). `embed/CookieDoh.svelte` is the SvelteKit wrapper.
 - Graphics modes (`gfx::modes`) post-process the finished frame: draw everything in the
   normal palette and let the `Converter` reduce it. Toasts and flashes go in before it.

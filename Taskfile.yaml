@@ -7,6 +7,8 @@ vars:
   # Graphics mode for the run tasks: vga (default), ega, c64, cga, hercules.
   GFX: '{{ .GFX | default "" }}'
   GFX_MODES: vga ega c64 cga hercules
+  # Where `web:export` copies the browser build (e.g. a SvelteKit app's static/cookie-doh).
+  DEST: '{{ .DEST | default "" }}'
 
 tasks:
   default:
@@ -133,6 +135,18 @@ tasks:
     deps: [assets:manifest]
     cmds:
       - trunk build {{.PROFILE_FLAG}} {{.CLI_ARGS}}
+
+  web:export:
+    desc: Release browser build copied to DEST for embedding (e.g. DEST=../my-site/static/cookie-doh)
+    requires:
+      vars: [DEST]
+    preconditions: *web-preconditions
+    cmds:
+      # Own dist dir, so a running `task web` doesn't clobber it mid-copy.
+      - trunk build --release --dist target/web-release
+      - mkdir -p "{{.DEST}}"
+      - cp target/web-release/cookie-doh.js target/web-release/cookie-doh_bg.wasm "{{.DEST}}/"
+      - echo "Exported to {{.DEST}} - embed with embed/CookieDoh.svelte (base = its URL path)"
 
   assets:manifest:
     desc: Regenerate assets/manifest.txt, the list of files the web build preloads

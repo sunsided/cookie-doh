@@ -78,6 +78,36 @@ PROFILE=release task web:build   # dist/ - zip it for itch.io
 
 Sound starts after the first key press or click (browser rule).
 
+## Embedding in a website
+
+`task web:export DEST=../my-site/static/cookie-doh` copies a release build
+(`cookie-doh.js` + `cookie-doh_bg.wasm`) into your site. It fetches no other files, so it
+works from any path. For SvelteKit, drop in [`embed/CookieDoh.svelte`](embed/CookieDoh.svelte):
+
+```svelte
+<CookieDoh
+  autofocus
+  gfx="c64"
+  onexit={() => goto('/games')}
+  ongameover={({ score, level, record }) => saveScore(score)}
+/>
+```
+
+Without Svelte, create `<canvas id="cookie-doh" tabindex="0">` yourself (optionally with
+`data-cracktro` and `data-gfx="ega"`), `import('/path/cookie-doh.js')` and call its default
+export. The game reports to the page with bubbling DOM events on the canvas, and with
+`postMessage` to the parent when it runs in an iframe:
+
+| Event | When | `detail` |
+|---|---|---|
+| `cookie-doh:start` | a game starts | - |
+| `cookie-doh:exit` | Esc on the title screen | - |
+| `cookie-doh:gameover` | the session expired | `{ score, level, hiscore, record }` |
+
+On the web, exiting doesn't stop anything: the game goes quiet and frozen until the player
+presses Space (or clicks) again, and it pauses itself while its canvas is off the page. What
+"exit" means is up to the host - navigate away, close an overlay, show a leaderboard.
+
 ## How it's made
 
 There are no asset files. Everything is drawn and synthesized in code:

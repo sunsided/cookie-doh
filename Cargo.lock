@@ -401,6 +401,7 @@ dependencies = [
  "game-toolkit",
  "js-sys",
  "log",
+ "wasm-bindgen",
  "web-sys",
 ]
 

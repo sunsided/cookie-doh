@@ -7,7 +7,7 @@ use crate::gfx::modes::Converter;
 use crate::gfx::{H, Screen, W};
 use crate::logic::layout::{LANE_Y, LANES};
 use crate::logic::{CookieKind, DohCause, Event, Phase, World};
-use crate::platform;
+use crate::platform::{self, HostEvent};
 use crate::render::cracktro::Cracktro;
 use crate::render::fx::Fx;
 use crate::render::title::{Title, TitleAction};
@@ -123,6 +123,10 @@ pub struct CookieDoh {
     /// Audio was running last frame (on the web it starts on the first key press, which must
     /// not also skip the cracktro).
     sound_was_on: bool,
+    /// Exited to the host page (web): frozen and silent until the player comes back.
+    dormant: bool,
+    /// Audio is muted because the host has the game hidden.
+    host_muted: bool,
     /// A cracktro key press was already spent on unlocking audio.
     unlock_press_spent: bool,
 }
@@ -142,6 +146,7 @@ impl CookieDoh {
     }
 
     fn start_game(&mut self, ctx: &mut Context) {
+        platform::notify(HostEvent::Start);
         self.world = World::new(platform::seed());
         self.fx = Fx::new();
         self.mode = Mode::Play;
@@ -230,9 +235,9 @@ impl CookieDoh {
                 actions.push(self.title.confirm());
             }
         }
-        #[cfg(not(target_arch = "wasm32"))]
         if ctx.input.key_pressed(Key::Escape) {
-            ctx.quit();
+            self.exit(ctx);
+            return;
         }
         for a in actions {
             match a {
@@ -397,8 +402,63 @@ impl CookieDoh {
                 self.mode = Mode::Over;
                 self.over_t = 0.0;
                 self.record = self.save_record();
+                platform::notify(HostEvent::GameOver {
+                    score: self.world.score,
+                    level: self.world.level,
+                    hiscore: self.hiscore,
+                    record: self.record,
+                });
             }
         }
+    }
+
+    /// Leave the game. Natively that closes the window. On the web there is nothing to close:
+    /// the page gets a `cookie-doh:exit` event and the game goes quiet until it's needed again.
+    fn exit(&mut self, ctx: &mut Context) {
+        platform::notify(HostEvent::Exit);
+        if cfg!(target_arch = "wasm32") {
+            self.dormant = true;
+        } else {
+            ctx.quit();
+        }
+    }
+
+    /// Mute while the host has the game hidden, without touching the player's own mute.
+    fn set_host_muted(&mut self, ctx: &mut Context, muted: bool) {
+        if self.host_muted != muted {
+            self.host_muted = muted;
+            self.apply_volume(ctx);
+        }
+    }
+
+    fn apply_volume(&self, ctx: &mut Context) {
+        if let Some(a) = &mut ctx.audio {
+            a.set_master_volume(if self.muted || self.host_muted {
+                0.0
+            } else {
+                1.0
+            });
+        }
+    }
+
+    /// A deliberate "I'm back" from the player: a key the game uses, a click or a tap.
+    fn wake_pressed(&mut self, ctx: &Context) -> bool {
+        let i = &ctx.input;
+        let keys = [
+            Key::Space,
+            Key::Enter,
+            Key::ArrowUp,
+            Key::ArrowDown,
+            Key::ArrowLeft,
+            Key::ArrowRight,
+        ];
+        let pad = i
+            .first_gamepad()
+            .is_some_and(|p| p.button_pressed(Button::South) || p.button_pressed(Button::Start));
+        keys.iter().any(|&k| i.key_pressed(k))
+            || pad
+            || i.mouse_pressed(MouseButton::Left)
+            || !self.taps.is_empty()
     }
 
     /// Keep the score if it beats the hi-score. Returns whether it did.
@@ -466,6 +526,8 @@ impl Game for CookieDoh {
             toast_t: 0.0,
             sound_was_on: false,
             unlock_press_spent: false,
+            dormant: false,
+            host_muted: false,
         };
         if options.cracktro {
             game.goto_cracktro(ctx);
@@ -476,12 +538,28 @@ impl Game for CookieDoh {
     }
 
     fn update(&mut self, ctx: &mut Context, dt: f32) {
+        // Hidden by the host (exited, or the canvas was taken off the page): freeze and stay
+        // silent. A run in progress waits behind the pause screen.
+        if self.dormant || !platform::is_active() {
+            let woke = self.dormant && platform::is_active() && self.wake_pressed(ctx);
+            self.taps.clear();
+            if woke {
+                self.dormant = false;
+                self.set_host_muted(ctx, false);
+            } else {
+                if self.mode == Mode::Play {
+                    self.paused = true;
+                }
+                self.set_host_muted(ctx, true);
+            }
+            // The waking press only wakes.
+            return;
+        }
+        self.set_host_muted(ctx, false);
         self.t += dt;
         if ctx.input.key_pressed(Key::KeyM) {
             self.muted = !self.muted;
-            if let Some(a) = &mut ctx.audio {
-                a.set_master_volume(if self.muted { 0.0 } else { 1.0 });
-            }
+            self.apply_volume(ctx);
         }
         if ctx.input.key_pressed(Key::KeyC) {
             self.scanlines = !self.scanlines;
@@ -550,7 +628,11 @@ impl Game for CookieDoh {
                 }
             }
         }
-        if self.toast_t > 0.0 {
+        if self.dormant {
+            self.screen
+                .blend_rect(0, 0, W, H, crate::gfx::palette::NAVY, 0.7);
+            crate::render::toast(&mut self.screen, "SEE YOU! PRESS SPACE TO COME BACK");
+        } else if self.toast_t > 0.0 {
             crate::render::toast(&mut self.screen, self.gfx.mode.blurb());
         }
         if let Some((c, a)) = self.fx.flash {
@@ -595,6 +677,9 @@ pub fn config() -> AppConfig {
         height: (H * 4) as u32,
         asset_root: asset_root!(),
         canvas_id: Some(CANVAS_ID.into()),
+        // Everything is generated in code: no asset files to fetch, not even the manifest,
+        // so the build works from any URL an embedding page puts it at.
+        web_preload: Some(Vec::new()),
         random_seed: platform::seed(),
         ..Default::default()
     }

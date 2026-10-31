@@ -1,5 +1,6 @@
-//! The few things that differ between native and the browser: hi-score storage, a seed, and
-//! launch options (command-line flags natively, the URL query on the web).
+//! The few things that differ between native and the browser: hi-score storage, a seed,
+//! launch options (command-line flags natively; the URL query or the canvas's `data-`
+//! attributes on the web), and telling an embedding page what happened.
 
 use crate::gfx::modes::GfxMode;
 
@@ -8,6 +9,34 @@ use crate::gfx::modes::GfxMode;
 pub struct Options {
     pub cracktro: bool,
     pub gfx: Option<GfxMode>,
+}
+
+/// Things the embedding page may want to react to. On the web each becomes a bubbling
+/// `cookie-doh:<name>` DOM event on the canvas (with the fields in `event.detail`), and a
+/// `postMessage({ type: "cookie-doh:<name>", ... })` to the parent when running in an iframe.
+/// Natively they are only logged.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HostEvent {
+    /// A game started (the player accepted the consent banner).
+    Start,
+    /// The player asked to leave (Esc on the title screen).
+    Exit,
+    GameOver {
+        score: u32,
+        level: u32,
+        hiscore: u32,
+        record: bool,
+    },
+}
+
+impl HostEvent {
+    pub fn name(self) -> &'static str {
+        match self {
+            HostEvent::Start => "cookie-doh:start",
+            HostEvent::Exit => "cookie-doh:exit",
+            HostEvent::GameOver { .. } => "cookie-doh:gameover",
+        }
+    }
 }
 
 impl Options {
@@ -49,6 +78,15 @@ mod imp {
         if let Err(e) = std::fs::write(&p, score.to_string()) {
             log::warn!("save hiscore to {}: {e}", p.display());
         }
+    }
+
+    pub fn notify(event: super::HostEvent) {
+        log::info!("host event: {event:?}");
+    }
+
+    /// Natively the game always has the screen to itself.
+    pub fn is_active() -> bool {
+        true
     }
 
     pub fn options() -> super::Options {
@@ -100,16 +138,81 @@ mod imp {
         }
     }
 
+    use wasm_bindgen::JsValue;
+
+    fn canvas() -> Option<web_sys::Element> {
+        web_sys::window()?
+            .document()?
+            .get_element_by_id(crate::app::CANVAS_ID)
+    }
+
+    /// The URL query, then the canvas's `data-cracktro` / `data-gfx` attributes, so an
+    /// embedding page can configure the game without touching its own URL.
     pub fn options() -> super::Options {
         let query = web_sys::window()
             .and_then(|w| w.location().search().ok())
             .unwrap_or_default();
-        super::Options::parse(
-            query
-                .trim_start_matches('?')
-                .split('&')
-                .filter(|p| !p.is_empty()),
-        )
+        let mut pairs: Vec<String> = query
+            .trim_start_matches('?')
+            .split('&')
+            .filter(|p| !p.is_empty())
+            .map(str::to_owned)
+            .collect();
+        if let Some(c) = canvas() {
+            for key in ["cracktro", "gfx"] {
+                if let Some(v) = c.get_attribute(&format!("data-{key}")) {
+                    pairs.push(if v.is_empty() {
+                        key.to_owned()
+                    } else {
+                        format!("{key}={v}")
+                    });
+                }
+            }
+        }
+        super::Options::parse(pairs.iter().map(String::as_str))
+    }
+
+    /// Paused while the canvas is detached from the page (the host component unmounted).
+    pub fn is_active() -> bool {
+        canvas().is_none_or(|c| c.is_connected())
+    }
+
+    pub fn notify(event: super::HostEvent) {
+        let detail = js_sys::Object::new();
+        let set = |k: &str, v: JsValue| {
+            let _ = js_sys::Reflect::set(&detail, &JsValue::from_str(k), &v);
+        };
+        if let super::HostEvent::GameOver {
+            score,
+            level,
+            hiscore,
+            record,
+        } = event
+        {
+            set("score", score.into());
+            set("level", level.into());
+            set("hiscore", hiscore.into());
+            set("record", record.into());
+        }
+        if let Some(c) = canvas() {
+            let init = web_sys::CustomEventInit::new();
+            init.set_bubbles(true);
+            init.set_detail(&detail);
+            match web_sys::CustomEvent::new_with_event_init_dict(event.name(), &init) {
+                Ok(e) => {
+                    let _ = c.dispatch_event(&e);
+                }
+                Err(e) => log::warn!("host event {}: {e:?}", event.name()),
+            }
+        }
+        // Inside an iframe, tell the parent page too.
+        if let Some(w) = web_sys::window()
+            && let Ok(Some(parent)) = w.parent()
+            && parent != w
+        {
+            set("type", JsValue::from_str(event.name()));
+            let _ = parent.post_message(&detail, "*");
+        }
     }
 
     pub fn seed() -> u64 {
