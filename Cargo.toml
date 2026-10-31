@@ -1,0 +1,30 @@
+[package]
+name = "cookie-doh"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+description = "Cookie D'oh! - Accept all Cookies. A silly 8/16-bit era arcade game."
+license = "EUPL-1.2"
+publish = false
+
+[dependencies]
+game-toolkit = "0.6"
+log = "0.4"
+
+# Native builds log via env_logger; on the web the toolkit logs to the browser console.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+env_logger = "0.11"
+dirs = "6"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+js-sys = "0.3"
+web-sys = { version = "0.3", features = ["Window", "Storage"] }
+
+# Optimize dependencies even in dev builds; our own code still compiles fast.
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
