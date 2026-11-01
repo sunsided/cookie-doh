@@ -60,7 +60,7 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: linux
+          name: release-linux
           path: cookie-doh-*-linux-x86_64.tar.gz
           if-no-files-found: error
 
@@ -104,7 +104,7 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: web
+          name: release-web
           path: cookie-doh-*-web.zip
           if-no-files-found: error
 
@@ -141,6 +141,8 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8
         with:
+          # Only the release archives, not the github-pages artifact.
+          pattern: release-*
           path: out
           merge-multiple: true
 
