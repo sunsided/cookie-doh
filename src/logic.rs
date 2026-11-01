@@ -397,6 +397,7 @@ impl World {
     }
 
     fn step_play(&mut self, dt: f32) {
+        let prev_pos = self.player.pos;
         self.move_lift(dt);
         for lane in 0..LANES {
             self.belt_phase[lane] += self.belt_speed[lane] * dt;
@@ -413,7 +414,7 @@ impl World {
             self.step_popup(dt);
         }
         self.step_spawns(dt);
-        self.step_cookies(dt);
+        self.step_cookies(dt, prev_pos);
         if self.phase == Phase::Play && self.accepted >= self.tuning.quota {
             let bonus = 250 * self.level + 100 * self.lives;
             self.score += bonus;
@@ -606,8 +607,22 @@ impl World {
         (LANE_Y[lane] + 1.0, BELT_END_X - 2.0, BELT_END_X + 14.0)
     }
 
-    fn step_cookies(&mut self, dt: f32) {
+    /// Top of the lift's jar opening at lift position `pos` (in lanes, fractional while it
+    /// travels).
+    pub fn lift_mouth_y(pos: f32) -> f32 {
+        let pos = pos.clamp(0.0, (LANES - 1) as f32);
+        let lo = pos.floor() as usize;
+        let hi = (lo + 1).min(LANES - 1);
+        let k = pos - lo as f32;
+        LANE_Y[lo] + (LANE_Y[hi] - LANE_Y[lo]) * k + 1.0
+    }
+
+    /// `prev_pos` is the lift position before this step's move, so a jar travelling through
+    /// a falling cookie catches it.
+    fn step_cookies(&mut self, dt: f32, prev_pos: f32) {
         let parked = self.player.parked();
+        let (pos, nearest) = (self.player.pos, self.player.nearest());
+        let (mouth, prev_mouth) = (Self::lift_mouth_y(pos), Self::lift_mouth_y(prev_pos));
         let spider_lane = self.spider_lane();
         let cleaner_docked = self.hazards && self.cleaner.docked();
         let mut vacuumed = Vec::new();
@@ -683,24 +698,28 @@ impl World {
                     c.state = CookieState::Falling { vx, vy };
                     let below = c.lane + 1;
                     let bottom = c.y + COOKIE_SIZE;
+                    // The jar catches it wherever it meets it in the column under the belt
+                    // end: parked one lane down (a dive-save), arriving at the cookie's own
+                    // lane just too late for the belt, or rising through it. The cookie had
+                    // to be above the jar's mouth before and has reached it now.
+                    let (_, x0, x1) = Self::jar_mouth(c.lane);
+                    let cx = c.x + COOKIE_SIZE / 2.0;
+                    let lane = c.lane as f32;
+                    if (lane..=lane + 1.0).contains(&pos)
+                        && prev_y + COOKIE_SIZE <= prev_mouth + 4.0
+                        && bottom >= mouth
+                        && (x0 - 4.0..=x1).contains(&cx)
+                    {
+                        c.state = CookieState::DropIn {
+                            lane: nearest,
+                            t: DROP_IN_TIME * 0.5,
+                            from: (c.x, c.y),
+                            saved: nearest > c.lane,
+                        };
+                        continue;
+                    }
                     if below < LANES {
-                        // Only the jar directly below is in the way: it can dive-save it.
-                        let (mouth_y, x0, x1) = Self::jar_mouth(below);
-                        let cx = c.x + COOKIE_SIZE / 2.0;
-                        if parked == Some(below)
-                            && prev_y + COOKIE_SIZE <= mouth_y + 4.0
-                            && bottom >= mouth_y
-                            && (x0..=x1).contains(&cx)
-                        {
-                            c.state = CookieState::DropIn {
-                                lane: below,
-                                t: DROP_IN_TIME * 0.5,
-                                from: (c.x, c.y),
-                                saved: true,
-                            };
-                            continue;
-                        }
-                        // Otherwise it smashes on the end of that belt.
+                        // Otherwise it smashes on the end of the belt below.
                         if bottom >= LANE_Y[below] + 2.0 {
                             c.y = LANE_Y[below] + 2.0 - COOKIE_SIZE;
                             crumbled.push(i);
@@ -896,6 +915,43 @@ mod tests {
         run(&mut w, 1.5);
         assert_eq!(w.accepted, 0);
         assert_eq!(w.lives, START_LIVES - 1);
+    }
+
+    /// Parked one lane down, moving up to meet a cookie that tips off just before the lift
+    /// arrives. It used to smash: the lift had left the lane below and wasn't parked yet.
+    #[test]
+    fn lift_arriving_late_from_below_catches_the_tipping_cookie() {
+        for lead in [0.0, 0.01, 0.02, 0.04, 0.06] {
+            let mut w = playing(1);
+            w.player.lane = 1;
+            w.player.pos = 1.0;
+            let x = CATCH_X - w.belt_speed[0] * lead;
+            put_cookie(&mut w, 0, x);
+            w.move_to(0);
+            run(&mut w, 1.5);
+            assert_eq!(w.accepted, 1, "lead {lead}");
+            assert_eq!(w.lives, START_LIVES, "lead {lead}");
+        }
+    }
+
+    /// Waiting one lane down for a falling cookie, then moving up into it, still catches it.
+    #[test]
+    fn lift_rising_through_a_falling_cookie_catches_it() {
+        for wait in [0.0, 0.05, 0.1, 0.15, 0.2] {
+            let mut w = playing(1);
+            w.player.lane = 1;
+            w.player.pos = 1.0;
+            w.move_to(2);
+            run(&mut w, 0.5);
+            put_cookie(&mut w, 0, CATCH_X - 0.1);
+            run(&mut w, 0.02);
+            w.move_to(1);
+            run(&mut w, wait);
+            w.move_to(0);
+            run(&mut w, 1.5);
+            assert_eq!(w.accepted, 1, "wait {wait}");
+            assert_eq!(w.lives, START_LIVES, "wait {wait}");
+        }
     }
 
     #[test]
