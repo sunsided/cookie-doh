@@ -1,7 +1,6 @@
 //! The game-toolkit glue: input, audio device, and presenting the framebuffer.
 
 use game_toolkit::prelude::*;
-use winit::event::{TouchPhase, WindowEvent};
 
 use crate::gfx::modes::Converter;
 use crate::gfx::{H, Screen, W};
@@ -112,8 +111,6 @@ pub struct CookieDoh {
     muted: bool,
     /// Last vertical stick direction, for edge-triggering the lift with an analog stick.
     stick: i32,
-    /// Touches don't reach the toolkit's `Input`; they're queued from `raw_window_event`.
-    taps: Vec<(f32, f32)>,
     t: f32,
     cracktro: Cracktro,
     /// Reduces frames to the selected historical [`crate::gfx::modes::GfxMode`].
@@ -163,7 +160,6 @@ impl CookieDoh {
         self.dormant = false;
         self.paused = false;
         self.stick = 0;
-        self.taps.clear();
         self.fx = Fx::new();
         self.toast_t = 0.0;
         self.gfx.set_mode(options.gfx.unwrap_or_default());
@@ -218,11 +214,14 @@ impl CookieDoh {
     }
 
     /// Pointer presses this frame (mouse clicks and touches), in framebuffer pixels.
-    fn pointer_presses(&mut self, input: &Input) -> Vec<(i32, i32)> {
-        let mut out: Vec<(i32, i32)> = self
-            .taps
-            .drain(..)
-            .map(|(x, y)| self.viewport.to_fb(x, y))
+    fn pointer_presses(&self, input: &Input) -> Vec<(i32, i32)> {
+        let mut out: Vec<(i32, i32)> = input
+            .touches_started()
+            .iter()
+            .map(|t| {
+                let (x, y) = t.pos();
+                self.viewport.to_fb(x, y)
+            })
             .collect();
         if input.mouse_pressed(MouseButton::Left) {
             let (x, y) = input.mouse_pos();
@@ -482,7 +481,7 @@ impl CookieDoh {
     }
 
     /// A deliberate "I'm back" from the player: a key the game uses, a click or a tap.
-    fn wake_pressed(&mut self, ctx: &Context) -> bool {
+    fn wake_pressed(&self, ctx: &Context) -> bool {
         let i = &ctx.input;
         let keys = [
             Key::Space,
@@ -498,7 +497,7 @@ impl CookieDoh {
         keys.iter().any(|&k| i.key_pressed(k))
             || pad
             || i.mouse_pressed(MouseButton::Left)
-            || !self.taps.is_empty()
+            || !i.touches_started().is_empty()
     }
 
     /// Keep the score if it beats the hi-score. Returns whether it did.
@@ -559,7 +558,6 @@ impl Game for CookieDoh {
             paused: false,
             muted: false,
             stick: 0,
-            taps: Vec::new(),
             t: 0.0,
             cracktro: Cracktro::default(),
             gfx: Converter::new(options.gfx.unwrap_or_default()),
@@ -589,7 +587,6 @@ impl Game for CookieDoh {
         // silent. A run in progress waits behind the pause screen.
         if self.dormant || !platform::is_active() {
             let woke = self.dormant && platform::is_active() && self.wake_pressed(ctx);
-            self.taps.clear();
             if woke {
                 self.dormant = false;
                 self.set_host_muted(ctx, false);
@@ -633,15 +630,6 @@ impl Game for CookieDoh {
             GameEvent::FocusChanged(false) if self.mode == Mode::Play => self.paused = true,
             _ => {}
         }
-    }
-
-    fn raw_window_event(&mut self, _ctx: &mut Context, e: &WindowEvent) -> bool {
-        if let WindowEvent::Touch(t) = e
-            && t.phase == TouchPhase::Started
-        {
-            self.taps.push((t.location.x as f32, t.location.y as f32));
-        }
-        false
     }
 
     fn render(&mut self, ctx: &mut Context, frame: &mut Frame) {

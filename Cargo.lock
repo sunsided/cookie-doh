@@ -873,9 +873,9 @@ dependencies = [
 
 [[package]]
 name = "game-toolkit"
-version = "0.6.1"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f117a521321f576b5d893fcff5d1ca17adddc900daa0c75edeb3f0e440d6699b"
+checksum = "3b04759b5a43fcde0da5a8beeadad809a1330744755896fba2996a7ba065347f"
 dependencies = [
  "anyhow",
  "game-toolkit-assets",
@@ -888,9 +888,9 @@ dependencies = [
 
 [[package]]
 name = "game-toolkit-assets"
-version = "0.6.1"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f213e0d14a080d2921fa838ab9279f1b4cf8bd71cc0900218fdd2c2e39f9f4ca"
+checksum = "cce941d38c0e6b413c21b661aa8dc79cb5effd6828ac7e856a752543b6961468"
 dependencies = [
  "anyhow",
  "js-sys",
@@ -903,9 +903,9 @@ dependencies = [
 
 [[package]]
 name = "game-toolkit-audio"
-version = "0.6.1"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "de5d1b83db67c435ed77324018348dab16ddf3709961ce9a26b15b6a52fdc9a1"
+checksum = "64bc5cd33481f37ff23d107b2f6a7ca63d2ec026d4630d95b5fff1dbd2d0b24b"
 dependencies = [
  "anyhow",
  "kira",
@@ -914,9 +914,9 @@ dependencies = [
 
 [[package]]
 name = "game-toolkit-core"
-version = "0.6.1"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b71ec859bcc21101d704297d3da25b705bcc605db8d24010a535865972720f35"
+checksum = "60af7b5bc39df131010933ee8e2b1b4fcd18e1f8dfbd68a3f8ecce19a2806d16"
 dependencies = [
  "anyhow",
  "game-toolkit-assets",
@@ -935,9 +935,9 @@ dependencies = [
 
 [[package]]
 name = "game-toolkit-gfx"
-version = "0.6.1"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f19354d130bcc0f6a98e0de87e89c1b5a2f1f3ddde7c2f5ecacb2bbc629ea85f"
+checksum = "07ac8bcc9f95016956136b9917905e6e893dc27693a170ef565b557c7e9533fd"
 dependencies = [
  "anyhow",
  "bytemuck",
@@ -951,9 +951,9 @@ dependencies = [
 
 [[package]]
 name = "game-toolkit-input"
-version = "0.6.1"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3ecb4bc03127e36b7c1c5cef9c8dec094539c9092d124e36e969157b80432dd1"
+checksum = "e5acff05ea213eceb674fc4d6b1357a7debd916a8d1451c80786bb9667fc1b40"
 dependencies = [
  "gilrs",
  "log",
