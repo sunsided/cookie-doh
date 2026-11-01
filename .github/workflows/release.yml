@@ -4,7 +4,8 @@
 #
 # Verify a downloaded artifact with:
 #   gh attestation verify cookie-doh-<tag>-linux-x86_64.tar.gz --repo sunsided/cookie-doh
-# The served cookie-doh_bg.wasm / cookie-doh.js on GitHub Pages verify the same way.
+# The unpacked cookie-doh binary and the cookie-doh_bg.wasm / cookie-doh.js served on
+# GitHub Pages verify the same way.
 #
 # Note: artifact attestations need a public repository (or GitHub Enterprise Cloud for
 # private ones); the attest step fails while the repository is private.
@@ -26,6 +27,10 @@ jobs:
     name: Linux binary
     # The oldest supported runner, so the binary runs on older glibc versions too.
     runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      id-token: write # sign the provenance attestation
+      attestations: write # store the provenance attestation
     steps:
       - uses: actions/checkout@v7
 
@@ -40,6 +45,11 @@ jobs:
 
       - name: Build
         run: cargo build --release --locked
+
+      # The binary itself, so it still verifies after the archive is unpacked.
+      - uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: target/release/cookie-doh
 
       - name: Package
         run: |
