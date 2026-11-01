@@ -33,6 +33,7 @@ web-sys = { version = "0.3", features = [
     "Event",
     "CustomEvent",
     "CustomEventInit",
+    "MessageEvent",
 ] }
 
 # Optimize dependencies even in dev builds; our own code still compiles fast.

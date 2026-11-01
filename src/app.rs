@@ -7,7 +7,7 @@ use crate::gfx::modes::Converter;
 use crate::gfx::{H, Screen, W};
 use crate::logic::layout::{LANE_Y, LANES};
 use crate::logic::{CookieKind, DohCause, Event, Phase, World};
-use crate::platform::{self, HostEvent};
+use crate::platform::{self, HostCommand, HostEvent, Options};
 use crate::render::cracktro::Cracktro;
 use crate::render::fx::Fx;
 use crate::render::title::{Title, TitleAction};
@@ -152,6 +152,29 @@ impl CookieDoh {
         self.mode = Mode::Play;
         self.paused = false;
         self.music.play(&mut ctx.audio, songs::game());
+    }
+
+    /// Start over as if freshly launched (the host asked for it). A run in progress keeps
+    /// its hi-score; the player's mute and scanline choices stay.
+    fn restart(&mut self, ctx: &mut Context, options: Options) {
+        if self.mode == Mode::Play {
+            self.save_record();
+        }
+        self.dormant = false;
+        self.paused = false;
+        self.stick = 0;
+        self.taps.clear();
+        self.fx = Fx::new();
+        self.toast_t = 0.0;
+        self.gfx.set_mode(options.gfx.unwrap_or_default());
+        // Audio unlocked by an earlier launch stays unlocked: the first cracktro press skips.
+        self.sound_was_on = ctx.audio.as_ref().is_none_or(Audio::is_started);
+        self.unlock_press_spent = false;
+        if options.cracktro {
+            self.goto_cracktro(ctx);
+        } else {
+            self.goto_title(ctx);
+        }
     }
 
     fn goto_cracktro(&mut self, ctx: &mut Context) {
@@ -538,6 +561,11 @@ impl Game for CookieDoh {
     }
 
     fn update(&mut self, ctx: &mut Context, dt: f32) {
+        for cmd in platform::commands() {
+            match cmd {
+                HostCommand::Restart(options) => self.restart(ctx, options),
+            }
+        }
         // Hidden by the host (exited, or the canvas was taken off the page): freeze and stay
         // silent. A run in progress waits behind the pause screen.
         if self.dormant || !platform::is_active() {

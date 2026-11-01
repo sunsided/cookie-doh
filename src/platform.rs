@@ -39,6 +39,21 @@ impl HostEvent {
     }
 }
 
+/// Requests from the embedding page. On the web a `cookie-doh:restart` DOM event on the
+/// canvas (or, in an iframe, a `postMessage({ type: "cookie-doh:restart" })` from the parent)
+/// becomes [`HostCommand::Restart`]; `detail` (or the message) may carry `cracktro` and `gfx`,
+/// which override the launch options. Natively there is no host and none arrive.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HostCommand {
+    /// Start over as if freshly launched, but keep the running loop, GPU context and the
+    /// already unlocked audio.
+    Restart(Options),
+}
+
+impl HostCommand {
+    pub const RESTART: &str = "cookie-doh:restart";
+}
+
 impl Options {
     /// Parse `key` / `key=value` pairs (flags without the leading dashes).
     pub fn parse<'a>(pairs: impl IntoIterator<Item = &'a str>) -> Self {
@@ -108,6 +123,10 @@ mod imp {
             i += 1;
         }
         super::Options::parse(pairs.iter().map(String::as_str))
+    }
+
+    pub fn commands() -> Vec<super::HostCommand> {
+        Vec::new()
     }
 
     pub fn seed() -> u64 {
@@ -213,6 +232,76 @@ mod imp {
             set("type", JsValue::from_str(event.name()));
             let _ = parent.post_message(&detail, "*");
         }
+    }
+
+    thread_local! {
+        static COMMANDS: std::cell::RefCell<Vec<super::HostCommand>> =
+            const { std::cell::RefCell::new(Vec::new()) };
+        static LISTENING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    }
+
+    /// Launch options with `cracktro` / `gfx` from a restart request's payload on top.
+    fn restart_options(payload: &JsValue) -> super::Options {
+        let mut o = options();
+        let get = |k: &str| js_sys::Reflect::get(payload, &JsValue::from_str(k)).ok();
+        if let Some(c) = get("cracktro").and_then(|v| v.as_bool()) {
+            o.cracktro = c;
+        }
+        if let Some(g) = get("gfx").and_then(|v| v.as_string()) {
+            o.gfx = crate::gfx::modes::GfxMode::parse(&g);
+        }
+        o
+    }
+
+    fn queue_restart(payload: &JsValue) {
+        let cmd = super::HostCommand::Restart(restart_options(payload));
+        COMMANDS.with_borrow_mut(|q| q.push(cmd));
+    }
+
+    /// Listen for host requests (once), on the canvas and, in an iframe, from the parent.
+    fn listen() {
+        use wasm_bindgen::JsCast;
+        use wasm_bindgen::closure::Closure;
+        if LISTENING.replace(true) {
+            return;
+        }
+        if let Some(c) = canvas() {
+            let on_restart =
+                Closure::<dyn FnMut(web_sys::CustomEvent)>::new(|e: web_sys::CustomEvent| {
+                    queue_restart(&e.detail())
+                });
+            let _ = c.add_event_listener_with_callback(
+                super::HostCommand::RESTART,
+                on_restart.as_ref().unchecked_ref(),
+            );
+            on_restart.forget();
+        }
+        if let Some(w) = web_sys::window()
+            && let Ok(Some(parent)) = w.parent()
+            && parent != w
+        {
+            let on_message = Closure::<dyn FnMut(web_sys::MessageEvent)>::new(
+                move |e: web_sys::MessageEvent| {
+                    let from_parent = e.source().is_some_and(|s| js_sys::Object::is(&s, &parent));
+                    let data = e.data();
+                    let kind = js_sys::Reflect::get(&data, &JsValue::from_str("type"))
+                        .ok()
+                        .and_then(|t| t.as_string());
+                    if from_parent && kind.as_deref() == Some(super::HostCommand::RESTART) {
+                        queue_restart(&data);
+                    }
+                },
+            );
+            let _ =
+                w.add_event_listener_with_callback("message", on_message.as_ref().unchecked_ref());
+            on_message.forget();
+        }
+    }
+
+    /// Host requests since the last call.
+    pub fn commands() -> Vec<super::HostCommand> {
+        listen();
+        COMMANDS.with_borrow_mut(std::mem::take)
     }
 
     pub fn seed() -> u64 {

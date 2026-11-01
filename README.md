@@ -104,6 +104,17 @@ export. The game reports to the page with bubbling DOM events on the canvas, and
 | `cookie-doh:exit` | Esc on the title screen | - |
 | `cookie-doh:gameover` | the session expired | `{ score, level, hiscore, record }` |
 
+The page can talk back: dispatch `cookie-doh:restart` on the canvas (or, from the parent of
+an iframe, `postMessage({ type: "cookie-doh:restart" })`) to start over as if freshly
+launched. `detail` (or the message) may set `cracktro` and `gfx`; anything left out comes from
+the launch options. The running loop, GPU context and unlocked audio stay, so a restart is
+instant and keeps the sound on. `CookieDoh.svelte` exports it as `restart()`, and its `fresh`
+prop restarts whenever the component is mounted again.
+
+```js
+canvas.dispatchEvent(new CustomEvent('cookie-doh:restart', { detail: { cracktro: true } }));
+```
+
 On the web, exiting doesn't stop anything: the game goes quiet and frozen until the player
 presses Space (or clicks) again, and it pauses itself while its canvas is off the page. What
 "exit" means is up to the host - navigate away, close an overlay, show a leaderboard.

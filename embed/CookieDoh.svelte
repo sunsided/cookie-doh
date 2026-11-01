@@ -9,9 +9,11 @@
 
   The game binds to its <canvas> once and has no teardown, so the canvas and the wasm module
   live for the whole page session. Unmounting this component only detaches the canvas (the
-  game pauses and goes silent while detached); mounting it again re-attaches the same canvas.
+  game pauses and goes silent while detached); mounting it again re-attaches the same canvas
+  and resumes, or, with `fresh`, starts over from the title (or cracktro) with the current
+  `cracktro` and `gfx` props. Starting over keeps the sound on once the player has unlocked it.
 
-  `cracktro` and `gfx` are read once, when the game first starts.
+  `restart()` (exported from this module) starts over at any time.
 -->
 <script module lang="ts">
 	export interface GameOver {
@@ -37,6 +39,11 @@
 		return canvas;
 	}
 
+	/** Start over as if freshly launched; omitted options fall back to the launch options. */
+	export function restart(options: { cracktro?: boolean; gfx?: string } = {}): void {
+		canvas?.dispatchEvent(new CustomEvent('cookie-doh:restart', { detail: options }));
+	}
+
 	function start(base: string): Promise<void> {
 		started ??= import(/* @vite-ignore */ `${base}/cookie-doh.js`).then((m) => m.default());
 		return started;
@@ -53,6 +60,8 @@
 		cracktro?: boolean;
 		/** Start in a historical graphics mode: 'ega' | 'c64' | 'cga' | 'hercules'. */
 		gfx?: 'vga' | 'ega' | 'c64' | 'cga' | 'hercules';
+		/** Start over when mounted again, instead of resuming where the player left. */
+		fresh?: boolean;
 		/** The player pressed Esc on the title screen; the game has gone quiet. */
 		onexit?: () => void;
 		/** A game started. */
@@ -66,6 +75,7 @@
 		autofocus = false,
 		cracktro = false,
 		gfx,
+		fresh = false,
 		onexit,
 		onstart,
 		ongameover
@@ -82,8 +92,10 @@
 		c.addEventListener('cookie-doh:exit', exit);
 		c.addEventListener('cookie-doh:start', begin);
 		c.addEventListener('cookie-doh:gameover', over);
+		const again = started !== null;
 		slot.appendChild(c);
 		if (autofocus) c.focus();
+		if (again && fresh) restart({ cracktro, gfx: gfx ?? 'vga' });
 		// The canvas must be in the document before the game starts, as it looks it up by id.
 		start(base).catch((e) => {
 			// winit throws a control-flow exception once the event loop is running; that is expected.
