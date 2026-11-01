@@ -122,7 +122,7 @@ impl Demo {
 /// Title screen state. Pure UI logic, no engine types.
 pub struct Title {
     pub t: f32,
-    /// 0 = ACCEPT ALL, 1 = REJECT.
+    /// 0 = ACCEPT ALL, 1 = REJECT (ALSO OK once it has given up).
     pub sel: usize,
     pub tries: usize,
     pub quip_t: f32,
@@ -168,7 +168,7 @@ impl Title {
     }
 
     pub fn select(&mut self, sel: usize) -> TitleAction {
-        let sel = if self.reject_alive() { sel.min(1) } else { 0 };
+        let sel = sel.min(1);
         if sel == self.sel {
             return TitleAction::None;
         }
@@ -177,7 +177,8 @@ impl Title {
     }
 
     pub fn confirm(&mut self) -> TitleAction {
-        if self.sel == 0 {
+        // ACCEPT ALL, or ALSO OK where REJECT used to be.
+        if self.sel == 0 || !self.reject_alive() {
             return TitleAction::Start;
         }
         self.tries += 1;
@@ -194,6 +195,15 @@ impl Title {
         TitleAction::Nope
     }
 
+    /// The second button's rectangle: the fleeing REJECT, or ALSO OK in REJECT's old spot.
+    fn second_button(&self) -> (i32, i32, i32, i32) {
+        if self.reject_alive() {
+            self.reject
+        } else {
+            REJECT_BTN
+        }
+    }
+
     pub fn quip(&self) -> Option<&'static str> {
         (self.quip_t > 0.0 && self.tries > 0)
             .then(|| REJECT_QUIPS[(self.tries - 1).min(REJECT_QUIPS.len() - 1)])
@@ -206,7 +216,7 @@ impl Title {
         };
         if inside(ACCEPT_BTN) {
             Some(0)
-        } else if self.reject_alive() && inside(self.reject) {
+        } else if inside(self.second_button()) {
             Some(1)
         } else {
             None
@@ -551,7 +561,7 @@ impl Renderer {
             };
             font::draw_centered(s, f, rx + rw / 2, ry + (rh - f.height()) / 2, label, GREY);
         } else {
-            let (rx, ry, rw, rh) = REJECT_BTN;
+            let (rx, ry, rw, rh) = ti.second_button();
             s.bevel(rx, ry, rw, rh, GREEN_LT, GREEN, GREEN_DK);
             font::draw_centered_shadow(
                 s,
@@ -564,7 +574,11 @@ impl Renderer {
             );
         }
         // Focus ring, pulsing rather than blinking off.
-        let (bx, by, bw, bh) = if ti.sel == 0 { ACCEPT_BTN } else { ti.reject };
+        let (bx, by, bw, bh) = if ti.sel == 0 {
+            ACCEPT_BTN
+        } else {
+            ti.second_button()
+        };
         let ring = if (ti.t * 4.0) as i32 % 2 == 0 {
             YELLOW
         } else {
@@ -638,8 +652,22 @@ mod tests {
             assert_eq!(t.confirm(), TitleAction::Nope);
         }
         assert!(!t.reject_alive());
-        t.select(1);
-        assert_eq!(t.sel, 0, "can't select a button that is gone");
+        assert_eq!(t.sel, 0, "focus falls back to ACCEPT ALL");
         assert_eq!(t.confirm(), TitleAction::Start);
+    }
+
+    /// Once REJECT gives up, ALSO OK takes its place and starts the game like ACCEPT ALL.
+    #[test]
+    fn also_ok_can_be_selected_clicked_and_starts() {
+        let mut t = Title::new();
+        for _ in 0..REJECT_QUIPS.len() {
+            t.select(1);
+            t.confirm();
+        }
+        assert_eq!(t.select(1), TitleAction::Moved);
+        assert_eq!(t.sel, 1);
+        assert_eq!(t.confirm(), TitleAction::Start);
+        let (x, y, w, h) = REJECT_BTN;
+        assert_eq!(t.hit(x + w / 2, y + h / 2), Some(1));
     }
 }
