@@ -269,7 +269,8 @@ What's different on the web:
 
 ## Commands
 
-This project ships its own `Taskfile.yaml` (needs [go-task](https://taskfile.dev)):
+This project ships its own `Taskfile.dist.yaml` (needs [go-task](https://taskfile.dev)); a local, untracked
+`Taskfile.yaml` takes precedence over it for personal overrides:
 
 ```sh
 task run                 # cargo run (PROFILE=release for a release build)
