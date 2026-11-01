@@ -4,6 +4,7 @@
 #
 # Verify a downloaded artifact with:
 #   gh attestation verify cookie-doh-<tag>-linux-x86_64.tar.gz --repo sunsided/cookie-doh
+# The served cookie-doh_bg.wasm / cookie-doh.js on GitHub Pages verify the same way.
 #
 # Note: artifact attestations need a public repository (or GitHub Enterprise Cloud for
 # private ones); the attest step fails while the repository is private.
@@ -56,6 +57,10 @@ jobs:
   web:
     name: Web build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # sign the provenance attestation
+      attestations: write # store the provenance attestation
     steps:
       - uses: actions/checkout@v7
 
@@ -74,6 +79,13 @@ jobs:
       # assets/manifest.txt is committed; trunk copies it with the asset folder.
       - name: Build
         run: trunk build --release --locked
+
+      # The same files GitHub Pages serves, so the deployed site verifies byte for byte.
+      - uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |
+            dist/cookie-doh_bg.wasm
+            dist/cookie-doh.js
 
       - name: Package
         run: |
