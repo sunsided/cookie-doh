@@ -44,6 +44,25 @@
 		canvas?.dispatchEvent(new CustomEvent('cookie-doh:restart', { detail: options }));
 	}
 
+	// `ref.null func; drop`: valid only with WebAssembly reference types, which the build uses
+	// (like every Rust wasm build since 1.82). There is no polyfill for missing wasm features.
+	const REF_TYPES = new Uint8Array([
+		0, 97, 115, 109, 1, 0, 0, 0, 1, 4, 1, 96, 0, 0, 3, 2, 1, 0, 10, 7, 1, 5, 0, 208, 112, 26, 11
+	]);
+
+	/** Why this browser can't run the game, or `null` if it can. */
+	function unsupported(): string | null {
+		if (typeof WebAssembly !== 'object' || !WebAssembly.validate(REF_TYPES)) {
+			return 'This browser is too old for the game. It runs in Chrome 96, Firefox 79, Safari 15 or newer.';
+		}
+		if (!('gpu' in navigator)) {
+			const gl = document.createElement('canvas').getContext('webgl2');
+			if (!gl) return 'The game needs WebGPU or WebGL2, which this browser has turned off or lacks.';
+			gl.getExtension('WEBGL_lose_context')?.loseContext();
+		}
+		return null;
+	}
+
 	function start(base: string): Promise<void> {
 		started ??= import(/* @vite-ignore */ `${base}/cookie-doh.js`).then((m) => m.default());
 		return started;
@@ -85,6 +104,11 @@
 
 	/** Attach the shared canvas to `slot`, start the game once, detach on unmount. */
 	function mount(slot: HTMLElement) {
+		const why = unsupported();
+		if (why) {
+			error = why;
+			return;
+		}
 		const c = getCanvas(cracktro, gfx);
 		const exit = () => onexit?.();
 		const begin = () => onstart?.();
@@ -100,7 +124,7 @@
 		start(base).catch((e) => {
 			// winit throws a control-flow exception once the event loop is running; that is expected.
 			if (!String(e).includes('Using exceptions for control flow')) {
-				error = String(e);
+				error = `Could not start the game: ${e}`;
 				started = null;
 			}
 		});
@@ -116,7 +140,7 @@
 <div class="cookie-doh">
 	<div class="slot" {@attach mount}></div>
 	{#if error}
-		<p class="error">Could not start the game: {error}</p>
+		<p class="error">{error}</p>
 	{/if}
 </div>
 

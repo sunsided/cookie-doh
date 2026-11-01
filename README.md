@@ -95,7 +95,9 @@ works from any path. For SvelteKit, drop in [`embed/CookieDoh.svelte`](embed/Coo
 
 Without Svelte, create `<canvas id="cookie-doh" tabindex="0">` yourself (optionally with
 `data-cracktro` and `data-gfx="ega"`), `import('/path/cookie-doh.js')` and call its default
-export. The game reports to the page with bubbling DOM events on the canvas, and with
+export. It needs a browser from 2021 or newer (WebAssembly reference types, plus WebGPU or
+WebGL2); `CookieDoh.svelte` checks that first and shows a message instead of a blank canvas.
+The game reports to the page with bubbling DOM events on the canvas, and with
 `postMessage` to the parent when it runs in an iframe:
 
 | Event | When | `detail` |
