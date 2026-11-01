@@ -115,6 +115,10 @@ prop restarts whenever the component is mounted again.
 canvas.dispatchEvent(new CustomEvent('cookie-doh:restart', { detail: { cracktro: true } }));
 ```
 
+If the page already had a key press or click when the game launches (or restarts), the game
+starts its sound right away instead of waiting for a key inside the game, where the browser
+allows it (Chromium, Firefox). Otherwise (Safari) it starts on the first key press as before.
+
 On the web, exiting doesn't stop anything: the game goes quiet and frozen until the player
 presses Space (or clicks) again, and it pauses itself while its canvas is off the page. What
 "exit" means is up to the host - navigate away, close an overlay, show a leaderboard.

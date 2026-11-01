@@ -129,6 +129,13 @@ mod imp {
         Vec::new()
     }
 
+    /// Natively the audio device opens at startup; there is nothing to probe.
+    pub fn probe_audio() {}
+
+    pub fn audio_allowed() -> bool {
+        false
+    }
+
     pub fn seed() -> u64 {
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -296,6 +303,59 @@ mod imp {
                 w.add_event_listener_with_callback("message", on_message.as_ref().unchecked_ref());
             on_message.forget();
         }
+    }
+
+    thread_local! {
+        /// A throwaway `AudioContext` and when it was made, watched by [`audio_allowed`].
+        static PROBE: std::cell::RefCell<Option<(web_sys::AudioContext, f64)>> =
+            const { std::cell::RefCell::new(None) };
+    }
+
+    /// How long a probe may stay suspended before we leave audio to the first key press.
+    /// A fresh context reports `suspended` at first in Firefox and WebKit and turns
+    /// `running` about 300 ms later (Chromium is `running` at once), so an early `suspended`
+    /// is no verdict.
+    const PROBE_MS: f64 = 1500.0;
+
+    /// `navigator.userActivation.hasBeenActive`: the player already interacted with this
+    /// document (e.g. typed into the host page). `false` where the API is missing.
+    fn has_been_active() -> bool {
+        let Some(nav) = web_sys::window().map(|w| w.navigator()) else {
+            return false;
+        };
+        js_sys::Reflect::get(&nav, &JsValue::from_str("userActivation"))
+            .ok()
+            .filter(|a| a.is_object())
+            .and_then(|a| js_sys::Reflect::get(&a, &JsValue::from_str("hasBeenActive")).ok())
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+    }
+
+    /// If the document already has user activation, open a probe `AudioContext` to find out
+    /// whether the browser lets audio run without another gesture.
+    pub fn probe_audio() {
+        if !has_been_active() || PROBE.with_borrow(Option::is_some) {
+            return;
+        }
+        match web_sys::AudioContext::new() {
+            Ok(c) => PROBE.set(Some((c, js_sys::Date::now()))),
+            Err(e) => log::debug!("audio probe: {e:?}"),
+        }
+    }
+
+    /// The probe is running, so starting the game's audio now will be audible. Only ever
+    /// `true` once; a probe still suspended after [`PROBE_MS`] is dropped (Safari wants a
+    /// gesture of its own), and the toolkit then starts audio on the first key press.
+    pub fn audio_allowed() -> bool {
+        PROBE.with_borrow_mut(|p| {
+            let Some((c, t0)) = p else { return false };
+            let running = c.state() == web_sys::AudioContextState::Running;
+            if running || js_sys::Date::now() - *t0 > PROBE_MS {
+                let _ = c.close();
+                *p = None;
+            }
+            running
+        })
     }
 
     /// Host requests since the last call.

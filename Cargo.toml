@@ -34,6 +34,9 @@ web-sys = { version = "0.3", features = [
     "CustomEvent",
     "CustomEventInit",
     "MessageEvent",
+    "Navigator",
+    "AudioContext",
+    "AudioContextState",
 ] }
 
 # Optimize dependencies even in dev builds; our own code still compiles fast.
