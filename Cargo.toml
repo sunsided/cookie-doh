@@ -10,7 +10,9 @@ repository = "https://github.com/sunsided/cookie-doh"
 publish = false
 
 [dependencies]
-game-toolkit = { version = "0.9", features = ["synth"] }
+# game-toolkit main until the next release: canvas detach handling (#83) and the autoplay
+# probe (#84, #86). Cargo.lock pins the commit; `cargo update -p game-toolkit` moves it.
+game-toolkit = { git = "https://github.com/sunsided/game-toolkit", branch = "main", features = ["synth"] }
 log = "0.4"
 
 # Native builds log via env_logger; on the web the toolkit logs to the browser console.
@@ -34,11 +36,6 @@ web-sys = { version = "0.3", features = [
     "CustomEvent",
     "CustomEventInit",
     "MessageEvent",
-    "Navigator",
-    "AudioContext",
-    "AudioContextState",
-    "MutationObserver",
-    "MutationObserverInit",
 ] }
 
 # Optimize dependencies even in dev builds; our own code still compiles fast.

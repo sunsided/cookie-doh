@@ -99,11 +99,6 @@ mod imp {
         log::info!("host event: {event:?}");
     }
 
-    /// Natively the game always has the screen to itself.
-    pub fn is_active() -> bool {
-        true
-    }
-
     pub fn options() -> super::Options {
         // `--gfx cga` and `--gfx=cga` both work.
         let args: Vec<String> = std::env::args().skip(1).collect();
@@ -127,16 +122,6 @@ mod imp {
 
     pub fn commands() -> Vec<super::HostCommand> {
         Vec::new()
-    }
-
-    /// Natively the window can't be taken away from under the game.
-    pub fn watch_detach() {}
-
-    /// Natively the audio device opens at startup; there is nothing to probe.
-    pub fn probe_audio() {}
-
-    pub fn audio_allowed() -> bool {
-        false
     }
 
     pub fn seed() -> u64 {
@@ -174,8 +159,9 @@ mod imp {
             const { std::cell::RefCell::new(None) };
     }
 
-    /// The game's canvas, remembered once found: by id, a canvas taken off the page can't be
-    /// found any more, and it's the one the game renders into even if the host adds another.
+    /// The game's canvas, remembered once found: it's the one the game renders into even if
+    /// the host adds another with the same id, and a canvas taken off the page can't be found
+    /// by id any more.
     fn canvas() -> Option<web_sys::Element> {
         if let Some(c) = CANVAS.with_borrow(Clone::clone) {
             return Some(c);
@@ -211,11 +197,6 @@ mod imp {
             }
         }
         super::Options::parse(pairs.iter().map(String::as_str))
-    }
-
-    /// Paused while the canvas is detached from the page (the host component unmounted).
-    pub fn is_active() -> bool {
-        canvas().is_none_or(|c| c.is_connected())
     }
 
     pub fn notify(event: super::HostEvent) {
@@ -318,164 +299,6 @@ mod imp {
                 w.add_event_listener_with_callback("message", on_message.as_ref().unchecked_ref());
             on_message.forget();
         }
-    }
-
-    thread_local! {
-        /// Every `AudioContext` resumed after [`watch_detach`]: the toolkit's (kira's) among them.
-        static CONTEXTS: std::cell::RefCell<Vec<web_sys::AudioContext>> =
-            const { std::cell::RefCell::new(Vec::new()) };
-        /// Contexts [`watch_detach`] suspended because the canvas left the page.
-        static SUSPENDED: std::cell::RefCell<Vec<web_sys::AudioContext>> =
-            const { std::cell::RefCell::new(Vec::new()) };
-        static WATCHING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-    }
-
-    /// Go silent the moment the canvas is taken off the page, and resume when it's back.
-    ///
-    /// [`is_active`] alone can't do it: the game checks it in `update`, and a canvas outside
-    /// the document gets no more frames, so the music would play on until the next run. A
-    /// `MutationObserver` fires without a frame and suspends the audio contexts directly.
-    ///
-    /// The toolkit doesn't hand out kira's context, and wrapping the `AudioContext`
-    /// constructor wouldn't see it either: wasm-bindgen's glue grabs the constructor when the
-    /// module loads. Every audio backend `resume()`s its context to start playing, though, and
-    /// methods are looked up on the prototype at call time, so a `Proxy` around
-    /// `AudioContext.prototype.resume` remembers each context that plays. Call this before
-    /// audio starts.
-    pub fn watch_detach() {
-        use wasm_bindgen::JsCast;
-        use wasm_bindgen::closure::Closure;
-        if WATCHING.replace(true) {
-            return;
-        }
-        let Some(window) = web_sys::window() else {
-            return;
-        };
-        let get = |o: &JsValue, k: &str| js_sys::Reflect::get(o, &JsValue::from_str(k)).ok();
-        let proto = get(&window, "AudioContext").and_then(|c| get(&c, "prototype"));
-        let resume = proto.as_ref().and_then(|p| get(p, "resume"));
-        if let (Some(proto), Some(resume)) = (proto, resume) {
-            let apply =
-                Closure::<dyn FnMut(js_sys::Function, JsValue, js_sys::Array) -> JsValue>::new(
-                    |target: js_sys::Function, this: JsValue, args: js_sys::Array| -> JsValue {
-                        if let Some(c) = this.dyn_ref::<web_sys::AudioContext>() {
-                            CONTEXTS.with_borrow_mut(|cs| {
-                                if !cs.iter().any(|known| known == c) {
-                                    cs.push(c.clone());
-                                }
-                            });
-                        }
-                        match js_sys::Reflect::apply(&target, &this, &args) {
-                            Ok(promise) => promise,
-                            // Let the caller see the browser's own error.
-                            Err(e) => wasm_bindgen::throw_val(e),
-                        }
-                    },
-                );
-            let handler = js_sys::Object::new();
-            let _ = js_sys::Reflect::set(&handler, &JsValue::from_str("apply"), apply.as_ref());
-            apply.forget();
-            let proxy = js_sys::Proxy::new(&resume, &handler);
-            if js_sys::Reflect::set(&proto, &JsValue::from_str("resume"), &proxy).is_err() {
-                log::warn!("can't watch AudioContext; audio plays on when the canvas is removed");
-            }
-        }
-        let Some(document) = window.document() else {
-            return;
-        };
-        let on_change = Closure::<dyn FnMut()>::new(on_dom_change);
-        match web_sys::MutationObserver::new(on_change.as_ref().unchecked_ref()) {
-            Ok(observer) => {
-                let init = web_sys::MutationObserverInit::new();
-                init.set_child_list(true);
-                init.set_subtree(true);
-                if let Err(e) = observer.observe_with_options(&document, &init) {
-                    log::warn!("watching the canvas: {e:?}");
-                }
-                on_change.forget();
-            }
-            Err(e) => log::warn!("watching the canvas: {e:?}"),
-        }
-    }
-
-    /// Suspend running contexts when the canvas is gone, resume the ones we suspended when
-    /// it's back. The game's own mute (`set_host_muted`) takes over again on the next frame.
-    fn on_dom_change() {
-        use web_sys::AudioContextState::{Closed, Running};
-        let suspended = SUSPENDED.with_borrow(|s| !s.is_empty());
-        if is_active() {
-            if suspended {
-                for c in SUSPENDED.take() {
-                    let _ = c.resume();
-                }
-            }
-        } else if !suspended {
-            CONTEXTS.with_borrow_mut(|cs| {
-                cs.retain(|c| c.state() != Closed);
-                let running: Vec<_> = cs
-                    .iter()
-                    .filter(|c| c.state() == Running)
-                    .cloned()
-                    .collect();
-                for c in &running {
-                    let _ = c.suspend();
-                }
-                SUSPENDED.set(running);
-            });
-        }
-    }
-
-    thread_local! {
-        /// A throwaway `AudioContext` and when it was made, watched by [`audio_allowed`].
-        static PROBE: std::cell::RefCell<Option<(web_sys::AudioContext, f64)>> =
-            const { std::cell::RefCell::new(None) };
-    }
-
-    /// How long a probe may stay suspended before we leave audio to the first key press.
-    /// A fresh context reports `suspended` at first in Firefox and WebKit and turns
-    /// `running` about 300 ms later (Chromium is `running` at once), so an early `suspended`
-    /// is no verdict.
-    const PROBE_MS: f64 = 1500.0;
-
-    /// `navigator.userActivation.hasBeenActive`: the player already interacted with this
-    /// document (e.g. typed into the host page). `false` where the API is missing.
-    fn has_been_active() -> bool {
-        let Some(nav) = web_sys::window().map(|w| w.navigator()) else {
-            return false;
-        };
-        js_sys::Reflect::get(&nav, &JsValue::from_str("userActivation"))
-            .ok()
-            .filter(|a| a.is_object())
-            .and_then(|a| js_sys::Reflect::get(&a, &JsValue::from_str("hasBeenActive")).ok())
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false)
-    }
-
-    /// If the document already has user activation, open a probe `AudioContext` to find out
-    /// whether the browser lets audio run without another gesture.
-    pub fn probe_audio() {
-        if !has_been_active() || PROBE.with_borrow(Option::is_some) {
-            return;
-        }
-        match web_sys::AudioContext::new() {
-            Ok(c) => PROBE.set(Some((c, js_sys::Date::now()))),
-            Err(e) => log::debug!("audio probe: {e:?}"),
-        }
-    }
-
-    /// The probe is running, so starting the game's audio now will be audible. Only ever
-    /// `true` once; a probe still suspended after [`PROBE_MS`] is dropped (Safari wants a
-    /// gesture of its own), and the toolkit then starts audio on the first key press.
-    pub fn audio_allowed() -> bool {
-        PROBE.with_borrow_mut(|p| {
-            let Some((c, t0)) = p else { return false };
-            let running = c.state() == web_sys::AudioContextState::Running;
-            if running || js_sys::Date::now() - *t0 > PROBE_MS {
-                let _ = c.close();
-                *p = None;
-            }
-            running
-        })
     }
 
     /// Host requests since the last call.

@@ -161,7 +161,7 @@ impl CookieDoh {
         self.toast_t = 0.0;
         self.gfx.set_mode(options.gfx.unwrap_or_default());
         // The host page may have had a gesture since launch (the player typed a command).
-        platform::probe_audio();
+        ctx.start_audio_if_allowed();
         // Audio unlocked by an earlier launch stays unlocked: the first cracktro press skips.
         self.sound_was_on = ctx.audio.as_ref().is_none_or(Audio::is_started);
         self.unlock_press_spent = false;
@@ -444,21 +444,6 @@ impl CookieDoh {
         }
     }
 
-    /// On the web, start audio without waiting for a key in the game when the page already
-    /// had a gesture and the browser lets it play. Otherwise the toolkit starts it on the
-    /// first key press as usual.
-    fn start_audio_early(&mut self, ctx: &mut Context) {
-        if let Some(a) = &mut ctx.audio
-            && !a.is_started()
-            && platform::audio_allowed()
-        {
-            match a.start() {
-                Ok(()) => self.sound_was_on = true,
-                Err(e) => log::warn!("early audio start: {e}"),
-            }
-        }
-    }
-
     /// Mute while the host has the game hidden, without touching the player's own mute.
     fn set_host_muted(&mut self, ctx: &mut Context, muted: bool) {
         if self.host_muted != muted {
@@ -526,8 +511,6 @@ impl CookieDoh {
 
 impl Game for CookieDoh {
     fn init(ctx: &mut Context) -> Result<Self> {
-        // Before anything opens an `AudioContext`, so the watcher sees the toolkit's.
-        platform::watch_detach();
         let options = platform::options();
         let screen = Screen::new();
         let rgba = vec![0; (W * H * 4) as usize];
@@ -566,7 +549,6 @@ impl Game for CookieDoh {
             dormant: false,
             host_muted: false,
         };
-        platform::probe_audio();
         if options.cracktro {
             game.goto_cracktro(ctx);
         } else {
@@ -581,11 +563,11 @@ impl Game for CookieDoh {
                 HostCommand::Restart(options) => self.restart(ctx, options),
             }
         }
-        self.start_audio_early(ctx);
-        // Hidden by the host (exited, or the canvas was taken off the page): freeze and stay
-        // silent. A run in progress waits behind the pause screen.
-        if self.dormant || !platform::is_active() {
-            let woke = self.dormant && platform::is_active() && self.wake_pressed(ctx);
+        // Sent away by the host (exited): freeze and stay silent until the player is back. A
+        // run in progress waits behind the pause screen. (While the canvas is off the page
+        // there are no frames at all; the toolkit suspends the audio meanwhile.)
+        if self.dormant {
+            let woke = self.wake_pressed(ctx);
             if woke {
                 self.dormant = false;
                 self.set_host_muted(ctx, false);
@@ -626,7 +608,11 @@ impl Game for CookieDoh {
     fn event(&mut self, _ctx: &mut Context, e: &GameEvent) {
         match *e {
             GameEvent::Resized { width, height } => self.viewport = Viewport::fit(width, height),
-            GameEvent::FocusChanged(false) if self.mode == Mode::Play => self.paused = true,
+            GameEvent::FocusChanged(false) | GameEvent::CanvasAttached(false)
+                if self.mode == Mode::Play =>
+            {
+                self.paused = true;
+            }
             _ => {}
         }
     }
