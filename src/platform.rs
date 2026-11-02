@@ -129,6 +129,9 @@ mod imp {
         Vec::new()
     }
 
+    /// Natively the window can't be taken away from under the game.
+    pub fn watch_detach() {}
+
     /// Natively the audio device opens at startup; there is nothing to probe.
     pub fn probe_audio() {}
 
@@ -166,10 +169,22 @@ mod imp {
 
     use wasm_bindgen::JsValue;
 
+    thread_local! {
+        static CANVAS: std::cell::RefCell<Option<web_sys::Element>> =
+            const { std::cell::RefCell::new(None) };
+    }
+
+    /// The game's canvas, remembered once found: by id, a canvas taken off the page can't be
+    /// found any more, and it's the one the game renders into even if the host adds another.
     fn canvas() -> Option<web_sys::Element> {
-        web_sys::window()?
+        if let Some(c) = CANVAS.with_borrow(Clone::clone) {
+            return Some(c);
+        }
+        let c = web_sys::window()?
             .document()?
-            .get_element_by_id(crate::app::CANVAS_ID)
+            .get_element_by_id(crate::app::CANVAS_ID)?;
+        CANVAS.set(Some(c.clone()));
+        Some(c)
     }
 
     /// The URL query, then the canvas's `data-cracktro` / `data-gfx` attributes, so an
@@ -302,6 +317,111 @@ mod imp {
             let _ =
                 w.add_event_listener_with_callback("message", on_message.as_ref().unchecked_ref());
             on_message.forget();
+        }
+    }
+
+    thread_local! {
+        /// Every `AudioContext` resumed after [`watch_detach`]: the toolkit's (kira's) among them.
+        static CONTEXTS: std::cell::RefCell<Vec<web_sys::AudioContext>> =
+            const { std::cell::RefCell::new(Vec::new()) };
+        /// Contexts [`watch_detach`] suspended because the canvas left the page.
+        static SUSPENDED: std::cell::RefCell<Vec<web_sys::AudioContext>> =
+            const { std::cell::RefCell::new(Vec::new()) };
+        static WATCHING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    }
+
+    /// Go silent the moment the canvas is taken off the page, and resume when it's back.
+    ///
+    /// [`is_active`] alone can't do it: the game checks it in `update`, and a canvas outside
+    /// the document gets no more frames, so the music would play on until the next run. A
+    /// `MutationObserver` fires without a frame and suspends the audio contexts directly.
+    ///
+    /// The toolkit doesn't hand out kira's context, and wrapping the `AudioContext`
+    /// constructor wouldn't see it either: wasm-bindgen's glue grabs the constructor when the
+    /// module loads. Every audio backend `resume()`s its context to start playing, though, and
+    /// methods are looked up on the prototype at call time, so a `Proxy` around
+    /// `AudioContext.prototype.resume` remembers each context that plays. Call this before
+    /// audio starts.
+    pub fn watch_detach() {
+        use wasm_bindgen::JsCast;
+        use wasm_bindgen::closure::Closure;
+        if WATCHING.replace(true) {
+            return;
+        }
+        let Some(window) = web_sys::window() else {
+            return;
+        };
+        let get = |o: &JsValue, k: &str| js_sys::Reflect::get(o, &JsValue::from_str(k)).ok();
+        let proto = get(&window, "AudioContext").and_then(|c| get(&c, "prototype"));
+        let resume = proto.as_ref().and_then(|p| get(p, "resume"));
+        if let (Some(proto), Some(resume)) = (proto, resume) {
+            let apply =
+                Closure::<dyn FnMut(js_sys::Function, JsValue, js_sys::Array) -> JsValue>::new(
+                    |target: js_sys::Function, this: JsValue, args: js_sys::Array| -> JsValue {
+                        if let Some(c) = this.dyn_ref::<web_sys::AudioContext>() {
+                            CONTEXTS.with_borrow_mut(|cs| {
+                                if !cs.iter().any(|known| known == c) {
+                                    cs.push(c.clone());
+                                }
+                            });
+                        }
+                        match js_sys::Reflect::apply(&target, &this, &args) {
+                            Ok(promise) => promise,
+                            // Let the caller see the browser's own error.
+                            Err(e) => wasm_bindgen::throw_val(e),
+                        }
+                    },
+                );
+            let handler = js_sys::Object::new();
+            let _ = js_sys::Reflect::set(&handler, &JsValue::from_str("apply"), apply.as_ref());
+            apply.forget();
+            let proxy = js_sys::Proxy::new(&resume, &handler);
+            if js_sys::Reflect::set(&proto, &JsValue::from_str("resume"), &proxy).is_err() {
+                log::warn!("can't watch AudioContext; audio plays on when the canvas is removed");
+            }
+        }
+        let Some(document) = window.document() else {
+            return;
+        };
+        let on_change = Closure::<dyn FnMut()>::new(on_dom_change);
+        match web_sys::MutationObserver::new(on_change.as_ref().unchecked_ref()) {
+            Ok(observer) => {
+                let init = web_sys::MutationObserverInit::new();
+                init.set_child_list(true);
+                init.set_subtree(true);
+                if let Err(e) = observer.observe_with_options(&document, &init) {
+                    log::warn!("watching the canvas: {e:?}");
+                }
+                on_change.forget();
+            }
+            Err(e) => log::warn!("watching the canvas: {e:?}"),
+        }
+    }
+
+    /// Suspend running contexts when the canvas is gone, resume the ones we suspended when
+    /// it's back. The game's own mute (`set_host_muted`) takes over again on the next frame.
+    fn on_dom_change() {
+        use web_sys::AudioContextState::{Closed, Running};
+        let suspended = SUSPENDED.with_borrow(|s| !s.is_empty());
+        if is_active() {
+            if suspended {
+                for c in SUSPENDED.take() {
+                    let _ = c.resume();
+                }
+            }
+        } else if !suspended {
+            CONTEXTS.with_borrow_mut(|cs| {
+                cs.retain(|c| c.state() != Closed);
+                let running: Vec<_> = cs
+                    .iter()
+                    .filter(|c| c.state() == Running)
+                    .cloned()
+                    .collect();
+                for c in &running {
+                    let _ = c.suspend();
+                }
+                SUSPENDED.set(running);
+            });
         }
     }
 

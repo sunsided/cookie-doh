@@ -529,6 +529,8 @@ impl CookieDoh {
 
 impl Game for CookieDoh {
     fn init(ctx: &mut Context) -> Result<Self> {
+        // Before anything opens an `AudioContext`, so the watcher sees the toolkit's.
+        platform::watch_detach();
         let options = platform::options();
         let screen = Screen::new();
         let rgba = vec![0; (W * H * 4) as usize];
