@@ -10,9 +10,7 @@ repository = "https://github.com/sunsided/cookie-doh"
 publish = false
 
 [dependencies]
-# game-toolkit main until the next release: canvas detach handling (#83) and the autoplay
-# probe (#84, #86). Cargo.lock pins the commit; `cargo update -p game-toolkit` moves it.
-game-toolkit = { git = "https://github.com/sunsided/game-toolkit", branch = "main", features = ["synth"] }
+game-toolkit = { version = "0.10", features = ["synth"] }
 log = "0.4"
 
 # Native builds log via env_logger; on the web the toolkit logs to the browser console.
