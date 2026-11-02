@@ -140,10 +140,8 @@ fn main() {
     save(&s, "game_over");
 
     let bank = cookie_doh::sound::sfx::Bank::new();
-    let music = |name: &str, song| {
-        let mut p = cookie_doh::sound::tracker::Player::new(song);
-        let mut pcm = vec![0.0; cookie_doh::sound::SAMPLE_RATE as usize * 16];
-        p.fill(&mut pcm);
+    let music = |name: &str, tune: cookie_doh::sound::music::Tune| {
+        let pcm = tune.render(cookie_doh::sound::SAMPLE_RATE, 16.0);
         wav(&format!("{dir}/music_{name}.wav"), &pcm);
     };
     music("title", cookie_doh::sound::songs::title());

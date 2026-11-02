@@ -5,7 +5,33 @@
 //! "oo". The result is crushed to 6 bits at ~8 kHz, which is what makes it sound like a
 //! 1980s speech chip instead of a person.
 
-use super::synth::{Noise, SR, render};
+use super::SAMPLE_RATE;
+
+const SR: f32 = SAMPLE_RATE as f32;
+
+/// Render `secs` of `f(t)`.
+fn render(secs: f32, mut f: impl FnMut(f32) -> f32) -> Vec<f32> {
+    let n = (secs * SR) as usize;
+    (0..n).map(|i| f(i as f32 / SR)).collect()
+}
+
+/// White noise for the release burst of the "d": a xorshift, -1..1.
+struct Noise(u32);
+
+impl Default for Noise {
+    fn default() -> Self {
+        Self(0x9E37_79B9)
+    }
+}
+
+impl Noise {
+    fn sample(&mut self) -> f32 {
+        self.0 ^= self.0 << 13;
+        self.0 ^= self.0 >> 17;
+        self.0 ^= self.0 << 5;
+        self.0 as f32 / u32::MAX as f32 * 2.0 - 1.0
+    }
+}
 
 /// A Klatt-style resonator: unity gain at DC, peak at `f`, bandwidth `bw`.
 #[derive(Default)]
@@ -84,7 +110,7 @@ pub fn doh(pitch: f32) -> Vec<f32> {
             smooth(t, 0.018, 0.04) * (1.0 - smooth(t, LEN - 0.16, LEN))
         };
         let burst = if (0.016..0.026).contains(&t) {
-            noise.sample(12000.0) * 0.4
+            noise.sample() * 0.4
         } else {
             0.0
         };
@@ -94,7 +120,7 @@ pub fn doh(pitch: f32) -> Vec<f32> {
         f3.sample(y, fr3, 160.0)
     });
 
-    super::synth::normalize(&mut out, 0.95);
+    super::normalize(&mut out, 0.95);
     crush(&mut out, 8000.0, 6);
     out
 }
