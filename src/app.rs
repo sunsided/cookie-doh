@@ -11,11 +11,11 @@ use crate::render::cracktro::Cracktro;
 use crate::render::fx::Fx;
 use crate::render::title::{Title, TitleAction};
 use crate::render::{GameView, Renderer};
-use crate::sound::tracker::{Player, Song};
+use crate::sound::music::Tune;
 use crate::sound::{SAMPLE_RATE, sfx, songs};
 
 pub const CANVAS_ID: &str = "cookie-doh";
-const MUSIC_VOLUME: f32 = 0.32;
+const MUSIC_VOLUME: f32 = 0.5;
 const SFX_VOLUME: f32 = 0.6;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -55,19 +55,16 @@ impl Viewport {
 }
 
 struct Music {
-    handle: Option<StreamHandle>,
+    handle: Option<SynthHandle>,
     volume: f32,
 }
 
 impl Music {
-    fn play(&mut self, audio: &mut Option<Audio>, song: Song) {
+    fn play(&mut self, audio: &mut Option<Audio>, tune: Tune) {
         self.stop();
         let Some(audio) = audio else { return };
-        let mut player = Player::new(song);
-        let stream = move |out: &mut [f32]| player.fill(out);
-        match audio.play_stream_with(
-            stream,
-            SAMPLE_RATE,
+        match audio.play_synth_sound(
+            tune.sound_data(),
             PlayOptions::default().volume(self.volume).deferred(),
         ) {
             Ok(h) => self.handle = Some(h),

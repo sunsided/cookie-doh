@@ -213,7 +213,7 @@ Option<wgpu::TextureFormat>` (default `None`; set `Some(wgpu::TextureFormat::Dep
 
 ## Features
 
-This template enables `ui`.
+This project enables `synth`.
 All optional features and what they add to the prelude:
 
 | Feature | Adds | For |
@@ -221,7 +221,7 @@ All optional features and what they add to the prelude:
 | `ui` | `Ui`, `egui` | egui debug overlays |
 | `aseprite` | `SpriteSheet`, `AnimationPlayer`, `Animation`, `Direction`, `FrameRect`, `LoadAseprite` (`ctx.load_aseprite(p)`) | load `.aseprite` / exported sheets + play tagged animations |
 | `ecs` | `ChannelQueue`, `Vec2` (sillyecs glue) | archetype ECS |
-| `synth` | `Synth`, `synthie` | chiptune / procedural audio |
+| `synth` | `Synth`, `SynthHandle`, `synth` (`Song`, `Tempo`, `Preset`, ...), `synthie` | chiptune music (`audio.play_synth`) and effects |
 | `vector` | `vello` | high-quality 2D vector graphics (WebGPU only: skipped on WebGL2) |
 
 Enable in `Cargo.toml`: `game-toolkit = { ..., features = ["ui", "aseprite"] }`.
@@ -316,8 +316,12 @@ references: `01_window`, `02_sprite`, `03_primitives`, `04_text`, `05_tilemap`, 
   toolkit `Painter` directly - only the framebuffer sprite and scanlines go through it.
 - Sprites are ASCII art (`render/art.rs`); the color key is `gfx::palette::from_char`.
   `Sprite::parse` asserts equal row widths, and `art::tests` parses them all.
-- `src/sound/`: all audio synthesized; no asset files. Music streams through
-  `Audio::play_stream`, SFX are pre-rendered PCM played with `play_samples`.
+- `src/sound/`: all audio synthesized on the toolkit's synthie (`synth` feature); no asset
+  files. A `music::Tune` is a tracker `Song` plus one patch per channel: music streams via
+  `Audio::play_synth_sound(tune.sound_data())`, jingles and snapshots render the same setup
+  offline (`Tune::render`). SFX are pre-rendered PCM (`Synth`) played with `play_samples`.
+  The "D'oh!" voice (`voice.rs`) is a custom formant synth. `songs::tests::music_never_clips`
+  guards `music::MASTER_GAIN`.
 - Check art and audio headlessly: `task snapshot` (PNGs + WAVs in `snapshots/`).
 - Modules use `name.rs` + `name/` (no `mod.rs`).
 - After changing dependencies, run `task licenses` and commit `THIRD_PARTY_LICENSES.html`;

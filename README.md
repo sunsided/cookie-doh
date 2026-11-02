@@ -133,8 +133,10 @@ There are no asset files. Everything is drawn and synthesized in code:
   scaled by whole pixels (plus optional scanlines). Sprites are ASCII art in
   `src/render/art.rs` against a shared ~40-color palette (`src/gfx/palette.rs`); fonts are
   hand-made 5x7 and 3x5 bitmaps.
-- **Music** is a tiny 4-channel tracker (pulse / pulse / triangle / noise drums) playing
-  songs written in text notation (`src/sound/songs.rs`) on the audio thread.
+- **Music and effects** play on [synthie](https://crates.io/crates/synthie), the chiptune
+  synth built into game-toolkit: songs are tracker lanes in text notation on pulse and
+  triangle patches with a drum machine (`src/sound/songs.rs`), streamed on the audio thread;
+  effects are rendered to PCM at startup (`src/sound/sfx.rs`).
 - **"D'oh!"** is a formant synthesizer (`src/sound/voice.rs`): a glottal pulse through
   three cascaded resonators gliding from "d" to "oh", crushed to 6 bits at 8 kHz.
 
@@ -147,7 +149,7 @@ There are no asset files. Everything is drawn and synthesized in code:
 src/logic(.rs)  the rules, pure and unit-tested (tuning.rs holds every difficulty knob)
 src/gfx(.rs)    framebuffer, palette, fonts, sprite parser, a tiny PNG encoder
 src/render(.rs) scene, sprites, effects, title and game-over screens
-src/sound(.rs)  synth, tracker, songs, SFX, the voice
+src/sound(.rs)  songs and patches, SFX, the voice
 src/app.rs      game-toolkit glue: input, audio device, presenting the framebuffer
 src/platform.rs hi-score storage, launch options, events for an embedding page
 embed/          CookieDoh.svelte, a SvelteKit wrapper for the web build

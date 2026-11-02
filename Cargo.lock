@@ -910,6 +910,7 @@ dependencies = [
  "anyhow",
  "kira",
  "log",
+ "synthie",
 ]
 
 [[package]]
@@ -2877,6 +2878,16 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
+]
+
+[[package]]
+name = "synthie"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bcbc665a9e6e62965aa409fbff4ce18832af0436d1574ef13e336a14ba9795c2"
+dependencies = [
+ "kira",
+ "rtrb",
 ]
 
 [[package]]
